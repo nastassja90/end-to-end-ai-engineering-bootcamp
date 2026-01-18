@@ -53,6 +53,8 @@ Once running, access:
 | FastAPI docs     | http://localhost:8000/docs      |
 | Qdrant dashboard | http://localhost:6333/dashboard |
 
+Now you are ready to [embed the first data into Qdrant](#preparing-the-dataset).
+
 ---
 
 ## Prerequisites
@@ -75,6 +77,23 @@ The Docker Compose setup includes three services:
 - **Qdrant** — Vector database for storing embeddings (persisted in [qdrant_storage](./qdrant_storage))
 
 ---
+
+## Dataset Setup
+
+Before developing the RAG pipeline, you need to embed initial data into Qdrant.
+
+### Preparing the dataset
+
+Follow these notebooks in order:
+
+1. **[01-explore-amazon-dataset.ipynb](./notebooks/week1/01-explore-amazon-dataset.ipynb)** — Explore and understand the raw Amazon dataset
+2. **[02-RAG-preprocessing-amazon-dataset.ipynb](./notebooks/week1/02-RAG-preprocessing-amazon-dataset.ipynb)** — Preprocess and embed the data into Qdrant
+
+### Generating synthetic evaluation data
+
+To test your RAG pipeline, you can generate synthetic question-answer pairs using an LLM:
+
+- **[04-RAG-evaluation-synthetic-dataset.ipynb](./notebooks/week1/04-RAG-evaluation-synthetic-dataset.ipynb)** — Create evaluation datasets programmatically
 
 ## Running Evaluations
 
