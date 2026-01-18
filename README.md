@@ -1,64 +1,97 @@
-# ai-engineering-bootcamp-prerequisites
+# End-to-End AI Engineering Bootcamp
 
-Welcome to the prerequisites repository for the [End-to-End AI Engineering Bootcamp](https://maven.com/swirl-ai/end-to-end-ai-engineering)! This repository is dedicated to setting up your development environment and scafoling a simple project with a StreamLit UI frontend service decoupled from FastAPI server.
+A hands-on project featuring a **RAG (Retrieval-Augmented Generation) pipeline** with FastAPI, Streamlit, and Qdrant—complete with evaluation metrics via Ragas and observability through Langsmith.
 
-We strongly recomend you coding along the videos available on Maven platform rather than just cloning the repository and running the code.
+---
 
-If you do need to run the code, this is how:
+## Quick Start
 
-- Clone the repository.
-- Run:
+### 1. Clone and configure environment
 
 ```bash
 cp env.example .env
 ```
 
-Edit `.env` and add your API keys:
+Edit `.env` with your API keys:
 
 ```
-OPENAI_API_KEY=your_google_api_key
-GOOGLE_API_KEY=your_google_api_key
-GROQ_API_KEY=your_groq_api_key
+OPENAI_API_KEY=sk-...
+GOOGLE_API_KEY=...
+GROQ_API_KEY=gsk_...
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=...
+LANGSMITH_PROJECT=your-project-name
 ```
 
-Keep the remaining configuration as per `.env.example`.
+### 2. Install dependencies
 
-Install the dependencies using `uv`:
-
-```sh
+```bash
 uv sync
-```
-
-This will also create a local `.venv` folder. After installation, you can activate the virtual env in this way:
-
-```sh
 source .venv/bin/activate
 ```
 
-#### To run the project, execute:
+### 3. Authenticate with GitHub Container Registry
 
-Ensure first to login into GHRC with the following command:
-
-```sh
+```bash
 echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
 ```
 
-`GITHUB_TOKEN` must be loaded into your terminal environment via `.zshrc` file.
+> **Note:** `GITHUB_TOKEN` should be a [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) with `read:packages` scope, exported in your shell profile (`.zshrc`, `.bashrc`, etc.).
+
+### 4. Launch the stack
 
 ```bash
 make run-docker-compose
 ```
 
-Streamlit application: http://localhost:8501
+Once running, access:
 
-FastAPI documentation: http://localhost:8000/docs
+| Service          | URL                             |
+| ---------------- | ------------------------------- |
+| Streamlit UI     | http://localhost:8501           |
+| FastAPI docs     | http://localhost:8000/docs      |
+| Qdrant dashboard | http://localhost:6333/dashboard |
 
-## Contact
+---
 
-If you have any questions, feel free to contact me via aurimas@swirlai.com
+## Prerequisites
 
-You can also find me on:
+Before you begin, ensure you have:
 
-- 🔗 [LinkedIn](https://www.linkedin.com/in/aurimas-griciunas)
-- 🔗 [X](https://x.com/Aurimas_Gr)
-- 🔗 [Newsletter](https://www.newsletter.swirlai.com/)
+- **Python** with [uv](https://github.com/astral-sh/uv) package manager
+- **Docker** and **Docker Compose**
+- API accounts for **OpenAI**, **Google AI (Gemini)**, and **Groq**
+- A **Langsmith** account with a project created for this repository
+
+---
+
+## Project Architecture
+
+The Docker Compose setup includes three services:
+
+- **FastAPI** — Backend implementing the RAG pipeline
+- **Streamlit** — Frontend chat interface for interacting with the LLM
+- **Qdrant** — Vector database for storing embeddings (persisted in [qdrant_storage](./qdrant_storage))
+
+---
+
+## Running Evaluations
+
+Execute retriever evaluations with:
+
+```bash
+make run-evals-retriever
+```
+
+Evaluation metrics are computed using [Ragas](https://docs.ragas.io/en/stable/#why-ragas). Results and experiment history are available in your [Langsmith](https://smith.langchain.com/) dashboard under **Datasets & Experiments**.
+
+Application traces for the entire RAG pipeline can be found under the **Tracing** section.
+
+---
+
+## Useful Links
+
+- [Langsmith Dashboard](https://smith.langchain.com/)
+- [Ragas Documentation](https://docs.ragas.io/en/stable/)
+- [uv Package Manager](https://github.com/astral-sh/uv)

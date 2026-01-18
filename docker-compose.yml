@@ -21,6 +21,16 @@ services:
       - 8000:8000
     env_file:
       - .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
     restart: unless-stopped
     volumes:
       - ./apps/api/src:/app/apps/api/src
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - 6333:6333 # port to access Qdrant client interface
+      - 6334:6334 # port for internal Qdrant communication
+    volumes:
+      - ./qdrant_storage:/qdrant/storage:z
+    restart: unless-stopped

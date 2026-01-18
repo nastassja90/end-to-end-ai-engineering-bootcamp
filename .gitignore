@@ -208,3 +208,9 @@ __marimo__/
 
 # VsCode
 .vscode/
+
+# Exclude the data folder
+data/
+
+# Exclude the Qdrant storage local folder
+qdrant_storage/
