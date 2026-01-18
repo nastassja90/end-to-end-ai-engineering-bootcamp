@@ -3,7 +3,7 @@ run-docker-compose:
 	docker compose up --build
 
 clean-notebook-outputs:
-	jupyter nbconvert --clear-output --inplace notebooks/*/*.ipynb
+	jupyter nbconvert --clear-output --inplace notebooks/**/*.ipynb
 
 run-api-local:
 	uv run uvicorn apps.api.src.api.app:app --reload
