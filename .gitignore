@@ -208,6 +208,7 @@ __marimo__/
 
 # VsCode
 .vscode/
+.DS_Store
 
 # Exclude the data folder
 data/
