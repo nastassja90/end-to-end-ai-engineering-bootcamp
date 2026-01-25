@@ -37,6 +37,9 @@ def api_call(method, url, **kwargs):
         return False, {"message": str(e)}
 
 
+if "used_context" not in st.session_state:
+    st.session_state.used_context = []
+
 ## Lets create a sidebar with a dropdown for the model list and providers
 with st.sidebar:
     st.title("Settings")
@@ -52,6 +55,32 @@ with st.sidebar:
     # Save provider and model to session state
     st.session_state.provider = provider
     st.session_state.model_name = model_name
+
+    # Advanced Options section
+    st.subheader("Advanced Options")
+    enable_reranking = st.checkbox("Enable Re-ranking", value=False)
+    top_k = st.slider(
+        "Number of Contexts to Retrieve (top_k)", min_value=1, max_value=20, value=5
+    )
+    # save to session state
+    st.session_state.enable_reranking = enable_reranking
+    st.session_state.top_k = top_k
+
+    st.divider()
+
+    # Create tabs in the sidebar
+    (suggestions_tab,) = st.tabs(["Suggestions"])
+
+    with suggestions_tab:
+        if st.session_state.used_context:
+            for idx, item in enumerate(st.session_state.used_context):
+                st.caption(item.get("description", "No description available"))
+                if "image_url" in item:
+                    st.image(item["image_url"], width=250)
+                st.caption(f"Price: {item.get('price', 'N/A')} USD")
+                st.divider()
+        else:
+            st.info("No suggestions yet.")
 
 
 if "messages" not in st.session_state:
@@ -75,9 +104,19 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
             "provider": st.session_state.provider,
             "model_name": st.session_state.model_name,
             "query": prompt,
+            "extra_options": {
+                "top_k": st.session_state.top_k,
+                "enable_reranking": st.session_state.enable_reranking,
+            },
         }
-        output = api_call("post", f"{config.API_URL}/rag", json=json)
-        response_data = output[1]
-        answer = response_data["answer"]
+        status, output = api_call("post", f"{config.API_URL}/rag", json=json)
+        answer = output["answer"]
+        used_context = output["used_context"]
+
+        # set the used_context into the state
+        st.session_state.used_context = used_context
         st.write(answer)
+
     st.session_state.messages.append({"role": "assistant", "content": answer})
+    # rerun to show the used context updated (images)
+    st.rerun()

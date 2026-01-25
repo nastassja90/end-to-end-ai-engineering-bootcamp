@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from api.agents.prompts import SHOPPING_ASSISTANT_RAG_PROMPT_KEY
 
 
 class Config(BaseSettings):
@@ -8,12 +7,14 @@ class Config(BaseSettings):
     GOOGLE_API_KEY: str
     QDRANT_URL: str = "http://localhost:6333"
     # Default RAG prompt key to customize the prompt used in the RAG pipeline
-    RAG_PROMPT_KEY: str = SHOPPING_ASSISTANT_RAG_PROMPT_KEY
+    RAG_PROMPT_KEY: str = "retrieval_generation"
     # Langsmith environment variables
     LANGSMITH_TRACING: bool
     LANGSMITH_ENDPOINT: str
     LANGSMITH_PROJECT: str
     LANGSMITH_API_KEY: str
+    # Cohere API Key for re-ranking models
+    CO_API_KEY: str
 
     model_config = SettingsConfigDict(env_file=".env")
 

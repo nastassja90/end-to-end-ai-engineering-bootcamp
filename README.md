@@ -22,6 +22,7 @@ LANGSMITH_TRACING=true
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 LANGSMITH_API_KEY=...
 LANGSMITH_PROJECT=your-project-name
+CO_API_KEY=...
 ```
 
 ### 2. Install dependencies
@@ -63,7 +64,7 @@ Before you begin, ensure you have:
 
 - **Python** with [uv](https://github.com/astral-sh/uv) package manager
 - **Docker** and **Docker Compose**
-- API accounts for **OpenAI**, **Google AI (Gemini)**, and **Groq**
+- API accounts for **OpenAI**, **Google AI (Gemini)**, **Groq** and **Cohere**.
 - A **Langsmith** account with a project created for this repository
 
 ---

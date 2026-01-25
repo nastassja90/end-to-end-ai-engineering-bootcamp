@@ -1,4 +1,4 @@
-from typing import TypeAlias
+from typing import TypeAlias, Tuple
 from openai import OpenAI
 from openai.types.chat import ChatCompletion as OpenAIChatCompletion
 from groq import Groq
@@ -7,9 +7,37 @@ from google.genai import Client as Gemini
 from google.genai.types import GenerateContentResponse
 from api.core.config import Config
 from api.core.constants import GROQ, GOOGLE
+from pydantic import BaseModel, Field
+import instructor
 
-# Define a type alias for the LLM client
-LLMClient: TypeAlias = OpenAI | Groq | Gemini | None
+
+#############################################################
+# Define the Structured Output response type for Instructor #
+#############################################################
+
+
+# Define the pydantic model for the ReferencedItem retrieved from the vector database.
+class ReferencedItem(BaseModel):
+    id: str = Field(
+        ..., description="The unique identifier of the referenced item (parent ASIN)."
+    )
+    description: str = Field(
+        ..., description="The short description of the referenced item."
+    )
+
+
+# Define the output schema using Pydantic. This schema will be used to structure the model's response via instructor.
+class StructuredResponse(BaseModel):
+    answer: str = Field(
+        ..., description="A brief summary of the weather in Italy today."
+    )
+    references: list[ReferencedItem] = Field(
+        ..., description="A list of items used to answer the question."
+    )
+
+
+#############################################################
+
 
 # Define a type alias for LLM responses
 LLMResponse: TypeAlias = (
@@ -39,43 +67,37 @@ def extract_usage_metadata(response: LLMResponse, provider: str) -> dict:
         }
 
 
-def extract_response_text(response: LLMResponse, provider: str) -> str:
-    """Extract the response text from different LLM provider responses."""
-    if provider == GOOGLE:
-        return response.text
-    elif provider == GROQ:
-        return response.choices[0].message.content
-    else:  # Default to OpenAI
-        return response.choices[0].message.content
-
-
 def run_llm(
-    app_config: Config, provider, model_name, messages, max_tokens=500
-) -> LLMResponse:
+    app_config: Config,
+    provider: str,
+    model_name: str,
+    messages,
+    temperature: int = 0,
+) -> Tuple[StructuredResponse, LLMResponse]:
 
-    client: LLMClient = None
+    client: instructor.Instructor | None = None
 
     if provider == GOOGLE:
-        client = Gemini(api_key=app_config.GOOGLE_API_KEY)
-        response: LLMResponse = client.models.generate_content(
+        client = instructor.from_genai(Gemini(api_key=app_config.GOOGLE_API_KEY))
+        # For gemini we need a different format for messages and temperature is not supported
+        return client.chat.completions.create_with_completion(
             model=model_name,
-            contents=[message["content"] for message in messages],
+            messages=[
+                {
+                    "role": "user",
+                    "content": [message["content"] for message in messages],
+                }
+            ],
+            response_model=StructuredResponse,
         )
-        return response
-
     elif provider == GROQ:
-        client = Groq(api_key=app_config.GROQ_API_KEY)
-        response: LLMResponse = client.chat.completions.create(
-            model=model_name, messages=messages, max_completion_tokens=max_tokens
-        )
-        return response
+        client = instructor.from_groq(Groq(api_key=app_config.GROQ_API_KEY))
+    else:  # default to OpenAI
+        client = instructor.from_openai(OpenAI(api_key=app_config.OPENAI_API_KEY))
 
-    else:
-        client = OpenAI(api_key=app_config.OPENAI_API_KEY)
-        response: LLMResponse = client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            max_completion_tokens=max_tokens,
-            reasoning_effort="minimal",
-        )
-        return response
+    return client.chat.completions.create_with_completion(
+        model=model_name,
+        messages=messages,
+        temperature=temperature,
+        response_model=StructuredResponse,
+    )

@@ -25,13 +25,17 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
     )
     logger.info(f"Using prompt key: {config.RAG_PROMPT_KEY}")
 
-    answer = rag_pipeline(
+    result = rag_pipeline(
         app_config=config,
         payload=payload,
         qdrant_client=qdrant_client,
     )
 
-    return RAGResponse(request_id=request.state.request_id, answer=answer["answer"])
+    return RAGResponse(
+        request_id=request.state.request_id,
+        answer=result["answer"],
+        used_context=result["used_context"],
+    )
 
 
 api_router = APIRouter()

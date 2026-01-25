@@ -8,9 +8,13 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "cohere>=5.20.2",
     "fastapi>=0.128.0",
+    "fastembed>=0.7.4",
     "google-genai>=1.57.0",
     "groq>=1.0.0",
+    "instructor>=1.14.4",
+    "jsonref>=1.1.0",
     "langsmith>=0.6.4",
     "openai>=2.15.0",
     "pydantic>=2.12.5",
@@ -38,6 +42,7 @@ include = [
 
 [dependency-groups]
 dev = [
+    "cohere>=5.20.2",
     "langsmith>=0.6.4",
     "qdrant-client>=1.16.2",
 ]
