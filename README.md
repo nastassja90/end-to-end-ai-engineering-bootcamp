@@ -27,8 +27,10 @@ CO_API_KEY=...
 
 ### 2. Install dependencies
 
-```bash
-uv sync
+From the root type the following two commands:
+
+```sh
+uv sync --all-packages
 source .venv/bin/activate
 ```
 
@@ -87,8 +89,8 @@ Before developing the RAG pipeline, you need to embed initial data into Qdrant.
 
 Follow these notebooks in order:
 
-1. **[01-explore-amazon-dataset.ipynb](./notebooks/week1/01-explore-amazon-dataset.ipynb)** — Explore and understand the raw Amazon dataset
-2. **[02-RAG-preprocessing-amazon-dataset.ipynb](./notebooks/week1/02-RAG-preprocessing-amazon-dataset.ipynb)** — Preprocess and embed the data into Qdrant
+- **[01-explore-amazon-dataset.ipynb](./notebooks/week1/01-explore-amazon-dataset.ipynb)** — Explore and understand the raw Amazon dataset
+- **[02-RAG-preprocessing-amazon-dataset.ipynb](./notebooks/week1/02-RAG-preprocessing-amazon-dataset.ipynb)** — Preprocess and embed the data into Qdrant
 
 ### Generating synthetic evaluation data
 
@@ -106,7 +108,15 @@ make run-evals-retriever
 
 Evaluation metrics are computed using [Ragas](https://docs.ragas.io/en/stable/#why-ragas). Results and experiment history are available in your [Langsmith](https://smith.langchain.com/) dashboard under **Datasets & Experiments**.
 
-Application traces for the entire RAG pipeline can be found under the **Tracing** section.
+## Tracing
+
+Application traces for the entire RAG pipeline can be found under the **Tracing** section of the Langsmith dashboard.
+
+## Prompts Registry
+
+In the following notebook:
+
+- **[05-prompt-management.ipynb](./notebooks/week2/05-prompt-management.ipynb)** it is shown an example using Langsmith as a Prompt registry for easier cross-team collaboration. Visit the **Prompts** section on your Langsmith dashboard to manage all prompt templates in the registry.
 
 ---
 
