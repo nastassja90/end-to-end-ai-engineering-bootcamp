@@ -73,6 +73,9 @@ Before you begin, ensure you have:
 
 ## Project Architecture
 
+> [!TIP]  
+> Type the command `make help` to see all available Makefile recipes and their descriptions.
+
 The Docker Compose setup includes three services:
 
 - **FastAPI** — Backend implementing the RAG pipeline
