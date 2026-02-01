@@ -56,6 +56,14 @@ with st.sidebar:
     st.session_state.provider = provider
     st.session_state.model_name = model_name
 
+    st.subheader("Execution Type")
+    execution_type = st.radio(
+        "Select RAG Execution Type",
+        ("pipeline", "agent"),
+        help="Choose 'pipeline' for a straightforward retrieval and generation process, or 'agent' for a more dynamic interaction using an agent-based approach.",
+    )
+    st.session_state.execution_type = execution_type
+
     # Advanced Options section
     st.subheader("Advanced Options")
     enable_reranking = st.checkbox("Enable Re-ranking", value=False)
@@ -101,6 +109,7 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
 
     with st.chat_message("assistant"):
         json = {
+            "execution_type": st.session_state.execution_type,
             "provider": st.session_state.provider,
             "model_name": st.session_state.model_name,
             "query": prompt,

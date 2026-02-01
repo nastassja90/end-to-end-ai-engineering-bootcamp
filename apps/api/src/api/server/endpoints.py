@@ -1,9 +1,10 @@
 from fastapi import Request, APIRouter
 from api.server.models import RAGRequest, RAGResponse
-from api.core.config import config
+from api.core.config import Config
 
 from qdrant_client import QdrantClient
-from api.agents.retrieval_generation import rag_pipeline
+from api.agents.rag import rag_pipeline
+from api.agents.agents import rag_agent
 
 import logging
 
@@ -12,6 +13,8 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+config = Config()
 
 qdrant_client = QdrantClient(url=config.QDRANT_URL)
 
@@ -25,7 +28,11 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
     )
     logger.info(f"Using prompt key: {config.RAG_PROMPT_KEY}")
 
-    result = rag_pipeline(
+    executor = rag_pipeline
+    if payload.execution_type == "agent":
+        executor = rag_agent
+
+    result = executor(
         app_config=config,
         payload=payload,
         qdrant_client=qdrant_client,

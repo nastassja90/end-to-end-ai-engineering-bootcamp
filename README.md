@@ -123,8 +123,15 @@ In the following notebook:
 
 ---
 
+## Deep dive documentation
+
+Some concepts implemented in this project are further explained into dedicated docs. Here the list of all topics:
+
+- **[Agentic Workflow with LangGraph](./apps/api/src/api/agents/internal/README.md)**
+
 ## Useful Links
 
 - [Langsmith Dashboard](https://smith.langchain.com/)
 - [Ragas Documentation](https://docs.ragas.io/en/stable/)
+- [LangGraph Documentation](https://docs.langchain.com/oss/python/langgraph/overview)
 - [uv Package Manager](https://github.com/astral-sh/uv)

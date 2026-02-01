@@ -1,5 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
+
+
+ExecutionType = Literal["pipeline", "agent"]
+"""Enumeration for the type of RAG execution."""
 
 
 class RAGRequestExtraOptions(BaseModel):
@@ -12,6 +16,10 @@ class RAGRequestExtraOptions(BaseModel):
 
 
 class RAGRequest(BaseModel):
+    execution_type: ExecutionType = Field(
+        "pipeline",
+        description="The type of RAG execution: 'pipeline' or 'agent'. Default is 'pipeline'.",
+    )
     provider: str = Field(..., description="The LLM provider to use")
     model_name: str = Field(..., description="The model name to use")
     query: str = Field(..., description="The query to be used in the RAG pipeline")

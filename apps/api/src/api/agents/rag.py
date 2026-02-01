@@ -1,9 +1,9 @@
 from typing import Optional
 import numpy as np
 import openai
-from pydantic import BaseModel
 from cohere import ClientV2 as CohereClient, V2RerankResponse as CohereRerankResponse
 
+from api.agents.internal.models import RAGRetrievedContext
 from api.core.config import Config
 from api.server.models import RAGRequest, RAGUsedContextItem, RAGRequestExtraOptions
 from api.utils.tracing import hide_sensitive_inputs
@@ -40,13 +40,6 @@ reranking_model = "rerank-v4.0-fast"
 # instance for the cohere client
 cohere_client: Optional[CohereClient] = None
 """Cohere client instance for re-ranking, initialized on first use."""
-
-
-class RAGRetrievedContext(BaseModel):
-    retrieved_context_ids: list[str] = list()
-    retrieved_context: list[str] = list()
-    similarity_scores: list[float] = list()
-    retrieved_context_ratings: list[Optional[float]] = list()
 
 
 @traceable(

@@ -1,9 +1,9 @@
 # Evals for the retriever component of the RAG pipeline.
 
-from api.core.config import config
+from api.core.config import Config
 from api.core.constants import OPENAI, MODELS
-from api.server.models import RAGRequest, RAGRequestExtraOptions
-from api.agents.retrieval_generation import rag_pipeline
+from api.server.models import RAGRequest
+from api.agents.rag import rag_pipeline
 import os
 
 from qdrant_client import QdrantClient
@@ -22,6 +22,8 @@ os.environ["LANGCHAIN_CONCURRENCY_LIMIT"] = "10"
 # disable langsmith tracing for evals
 os.environ["LANGSMITH_TRACING"] = "false"
 
+# Load configuration
+config = Config()
 
 ls_client = Client(api_key=config.LANGSMITH_API_KEY)
 qdrant_client = QdrantClient(url=config.QDRANT_URL)
