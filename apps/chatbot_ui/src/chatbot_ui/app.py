@@ -1,7 +1,24 @@
 import streamlit as st
 import requests
 from chatbot_ui.core.config import config
-from chatbot_ui.core.constants import OPENAI, GROQ, GOOGLE, MODELS
+
+
+@st.cache_data(ttl=300)
+def fetch_app_config():
+    """Fetch configuration from the backend API."""
+    try:
+        response = requests.get(f"{config.API_URL}/config")
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to fetch configuration from API: {e}")
+        return {"models": {}, "providers": []}
+
+
+# Fetch configuration at startup
+app_config = fetch_app_config()
+MODELS = app_config.get("models", {})
+PROVIDERS = app_config.get("providers", [])
 
 
 def api_call(method, url, **kwargs):
@@ -44,14 +61,9 @@ if "used_context" not in st.session_state:
 with st.sidebar:
     st.title("Settings")
 
-    # Dropdown for model
-    provider = st.selectbox("Provider", [OPENAI, GROQ, GOOGLE])
-    if provider == OPENAI:
-        model_name = st.selectbox("Model", MODELS[OPENAI])
-    elif provider == GROQ:
-        model_name = st.selectbox("Model", MODELS[GROQ])
-    else:
-        model_name = st.selectbox("Model", MODELS[GOOGLE])
+    # Dropdown for provider and model
+    provider = st.selectbox("Provider", PROVIDERS)
+    model_name = st.selectbox("Model", MODELS.get(provider, []))
     # Save provider and model to session state
     st.session_state.provider = provider
     st.session_state.model_name = model_name

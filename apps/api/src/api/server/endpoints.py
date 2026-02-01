@@ -1,6 +1,7 @@
 from fastapi import Request, APIRouter
-from api.server.models import RAGRequest, RAGResponse
+from api.server.models import RAGRequest, RAGResponse, ConfigResponse
 from api.core.config import Config
+from api.core.constants import MODELS, OPENAI, GROQ, GOOGLE
 
 from qdrant_client import QdrantClient
 from api.agents.rag import rag_pipeline
@@ -45,5 +46,18 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
     )
 
 
+config_router = APIRouter()
+
+
+@config_router.get("/")
+def get_config() -> ConfigResponse:
+    """Return the application configuration including available models and providers."""
+    return ConfigResponse(
+        models=MODELS,
+        providers=[OPENAI, GROQ, GOOGLE],
+    )
+
+
 api_router = APIRouter()
+api_router.include_router(config_router, prefix="/config", tags=["config"])
 api_router.include_router(rag_router, prefix="/rag", tags=["rag"])

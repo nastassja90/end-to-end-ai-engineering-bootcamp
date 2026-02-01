@@ -44,3 +44,10 @@ class RAGResponse(BaseModel):
         default=[],
         description="The contextual info for each item used to generate the answer",
     )
+
+
+class ConfigResponse(BaseModel):
+    models: dict[str, list[str]] = Field(
+        ..., description="Dictionary of providers and their available models"
+    )
+    providers: list[str] = Field(..., description="List of available providers")

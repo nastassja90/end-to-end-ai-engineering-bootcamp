@@ -9,6 +9,7 @@ from api.core.config import Config
 from api.core.constants import GROQ, GOOGLE
 from api.agents.internal.models import StructuredResponse
 import instructor
+from instructor import Mode
 
 
 # Define a type alias for LLM responses
@@ -134,7 +135,12 @@ def run_llm(
             response_model=StructuredResponse,
         )
     elif provider == GROQ:
-        client = instructor.from_groq(Groq(api_key=app_config.GROQ_API_KEY))
+        # Use JSON mode for Groq to avoid tool_use_failed errors
+        # Groq sometimes generates <function=...> format instead of valid JSON in TOOLS mode
+        client = instructor.from_groq(
+            Groq(api_key=app_config.GROQ_API_KEY),
+            mode=Mode.JSON,
+        )
     else:  # default to OpenAI
         client = instructor.from_openai(OpenAI(api_key=app_config.OPENAI_API_KEY))
 
