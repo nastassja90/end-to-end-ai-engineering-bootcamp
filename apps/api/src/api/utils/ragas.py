@@ -2,6 +2,7 @@
 
 from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
+from langsmith.evaluation import EvaluationResult
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
 
@@ -19,7 +20,23 @@ ragas_embeddings = LangchainEmbeddingsWrapper(
 )
 
 
+def _check_outputs(run, required_keys: list[str]) -> bool:
+    """Check if run.outputs contains all required keys."""
+    if not run.outputs:
+        return False
+    return all(key in run.outputs for key in required_keys)
+
+
+def _error_result(key: str, comment: str) -> EvaluationResult:
+    """Return an EvaluationResult indicating a skipped/failed evaluation."""
+    return EvaluationResult(key=key, score=0.0, comment=comment)
+
+
 async def ragas_faithfulness(run, example):
+    if not _check_outputs(run, ["question", "answer", "retrieved_context"]):
+        return _error_result(
+            "faithfulness", "Missing required outputs from target function"
+        )
 
     sample = SingleTurnSample(
         user_input=run.outputs["question"],
@@ -32,6 +49,10 @@ async def ragas_faithfulness(run, example):
 
 
 async def ragas_response_relevancy(run, example):
+    if not _check_outputs(run, ["question", "answer", "retrieved_context"]):
+        return _error_result(
+            "response_relevancy", "Missing required outputs from target function"
+        )
 
     sample = SingleTurnSample(
         user_input=run.outputs["question"],
@@ -44,6 +65,10 @@ async def ragas_response_relevancy(run, example):
 
 
 async def ragas_context_precision_id_based(run, example):
+    if not _check_outputs(run, ["retrieved_context_ids"]):
+        return _error_result(
+            "context_precision", "Missing required outputs from target function"
+        )
 
     sample = SingleTurnSample(
         retrieved_context_ids=run.outputs["retrieved_context_ids"],
@@ -55,6 +80,10 @@ async def ragas_context_precision_id_based(run, example):
 
 
 async def ragas_context_recall_id_based(run, example):
+    if not _check_outputs(run, ["retrieved_context_ids"]):
+        return _error_result(
+            "context_recall", "Missing required outputs from target function"
+        )
 
     sample = SingleTurnSample(
         retrieved_context_ids=run.outputs["retrieved_context_ids"],

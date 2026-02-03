@@ -30,18 +30,23 @@ qdrant_client = QdrantClient(url=config.QDRANT_URL)
 
 
 def target_function(inputs: dict) -> dict:
-    payload = RAGRequest(
-        query=inputs["question"],
-        provider=OPENAI,
-        model_name="gpt-5-nano",  # TODO: replace with models from MODELS[OPENAI]
-        extra_options=None,  # use the default extra options
-    )
+    try:
+        payload = RAGRequest(
+            query=inputs["question"],
+            provider=OPENAI,
+            model_name=MODELS[OPENAI][0],  # Use first available model from MODELS
+            extra_options=None,  # use the default extra options
+        )
 
-    return rag_pipeline(
-        app_config=config,
-        payload=payload,
-        qdrant_client=qdrant_client,
-    )
+        result = rag_pipeline(
+            app_config=config,
+            payload=payload,
+            qdrant_client=qdrant_client,
+        )
+        return result
+    except Exception as e:
+        print(f"ERROR in target_function: {type(e).__name__}: {e}")
+        raise
 
 
 results = ls_client.evaluate(

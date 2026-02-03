@@ -1,4 +1,6 @@
 from typing import Optional
+from pathlib import Path
+from os import path
 import numpy as np
 import openai
 from cohere import ClientV2 as CohereClient, V2RerankResponse as CohereRerankResponse
@@ -28,7 +30,10 @@ from qdrant_client.models import (
 # use the qdrant collection that supports the hybrid search
 collection_name = "Amazon-items-collection-01-hybrid-search"
 
-prompt_yaml_filepath = "api/agents/prompts/rag_prompt_templates.yaml"
+# Build absolute path relative to this file's location
+prompt_yaml_filepath = path.join(
+    Path(__file__).parent, "prompts", "rag_prompt_templates.yaml"
+)
 """Path to the YAML file containing RAG prompt templates."""
 
 # the text embedding model to use for both indexing and querying
@@ -322,4 +327,7 @@ def rag_pipeline(
     return {
         "answer": result["answer"],
         "used_context": used_context,
+        "question": payload.query,
+        "retrieved_context_ids": retrieved_context.retrieved_context_ids,
+        "retrieved_context": retrieved_context.retrieved_context,
     }
