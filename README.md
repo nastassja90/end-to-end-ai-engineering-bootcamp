@@ -50,11 +50,12 @@ make run-docker-compose
 
 Once running, access:
 
-| Service          | URL                             |
-| ---------------- | ------------------------------- |
-| Streamlit UI     | http://localhost:8501           |
-| FastAPI docs     | http://localhost:8000/docs      |
-| Qdrant dashboard | http://localhost:6333/dashboard |
+| Service          | URL                                     |
+| ---------------- | --------------------------------------- |
+| Streamlit UI     | http://localhost:8501                   |
+| FastAPI docs     | http://localhost:8000/docs              |
+| Qdrant dashboard | http://localhost:6333/dashboard         |
+| Postgres db      | postgresql://user:pwd@localhost:5432/db |
 
 Now you are ready to [embed the first data into Qdrant](#preparing-the-dataset).
 
@@ -81,6 +82,7 @@ The Docker Compose setup includes three services:
 - **FastAPI** — Backend implementing the RAG pipeline
 - **Streamlit** — Frontend chat interface for interacting with the LLM
 - **Qdrant** — Vector database for storing embeddings (persisted in [qdrant_storage](./qdrant_storage))
+- **Postgres** - A postgres database to store previous conversation in multi-turn agent architecture (persisted in [postgres_data](./postgres_data))
 
 ---
 

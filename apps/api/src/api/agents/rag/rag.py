@@ -1,23 +1,22 @@
 from typing import Optional
-from pathlib import Path
-from os import path
 import numpy as np
 import openai
-from cohere import ClientV2 as CohereClient, V2RerankResponse as CohereRerankResponse
+from cohere import V2RerankResponse as CohereRerankResponse
 
+from api.core.cohere import cohere_client
 from api.agents.internal.models import RAGRetrievedContext
-from api.core.config import Config
+from api.core.config import Config, config
+from api.core.qdrant import qdrant_client
 from api.server.models import RAGRequest, RAGUsedContextItem, RAGRequestExtraOptions
 from api.utils.tracing import hide_sensitive_inputs
-from api.utils.prompts import prompt_template_config
-from api.utils.llm import (
+from api.agents.prompts.prompts import prompt_template_config
+from api.core.llm import (
     run_llm,
     extract_usage_metadata,
     StructuredResponse,
 )
 
 from langsmith import traceable, get_current_run_tree
-from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Filter,
     FieldCondition,
@@ -25,35 +24,21 @@ from qdrant_client.models import (
     Prefetch,
     Document,
     FusionQuery,
+    MatchAny,
 )
 
-# use the qdrant collection that supports the hybrid search
-collection_name = "Amazon-items-collection-01-hybrid-search"
 
-# Build absolute path relative to this file's location
-prompt_yaml_filepath = path.join(
-    Path(__file__).parent, "prompts", "rag_prompt_templates.yaml"
-)
-"""Path to the YAML file containing RAG prompt templates."""
-
-# the text embedding model to use for both indexing and querying
-embedding_model = "text-embedding-3-small"
-
-# reranking model name
-reranking_model = "rerank-v4.0-fast"
-
-# instance for the cohere client
-cohere_client: Optional[CohereClient] = None
-"""Cohere client instance for re-ranking, initialized on first use."""
+retrieval_generation_prompt = "retrieval_generation"
+"""Prompt ID containing RAG prompt templates."""
 
 
 @traceable(
     process_inputs=hide_sensitive_inputs,
     name="embed_query",
     run_type="embedding",
-    metadata={"ls_provider": "openai", "ls_model_name": embedding_model},
+    metadata={"ls_provider": "openai", "ls_model_name": config.RAG_EMBEDDING_MODEL},
 )
-def get_embedding(text: str, model: str = embedding_model) -> list[float]:
+def get_embedding(text: str, model: str = config.RAG_EMBEDDING_MODEL) -> list[float]:
     response = openai.embeddings.create(
         input=text,
         model=model,
@@ -92,21 +77,13 @@ def rerank(
         RAGRetrievedContext: A new context object containing the reranked documents, their corresponding IDs, similarity scores, and ratings, all ordered according to the reranking results.
 
     Notes:
-        - This function uses a global `cohere_client` for reranking. If not initialized, it creates a new `CohereClient` instance.
         - The reranked context preserves the association between documents, their IDs, similarity scores, and ratings.
         - Consider refactoring to use dependency injection for better testability and maintainability.
     """
     reranked_context = RAGRetrievedContext()
 
-    # initialize the cohere client if not already done
-    # use global to modify the module-level cohere_client variable from the scope of this function
-    # TODO: refactor this to use dependency injection.
-    global cohere_client
-    if not cohere_client:
-        cohere_client = CohereClient()
-
-    rerank: CohereRerankResponse = cohere_client.rerank(
-        model=reranking_model,
+    rerank: CohereRerankResponse = cohere_client.get().rerank(
+        model=config.RAG_RERANKING_MODEL,
         query=query,
         documents=original_context.retrieved_context,
         top_n=top_k,
@@ -138,6 +115,57 @@ def rerank(
     return reranked_context
 
 
+@traceable(name="retrieve_reviews_data", run_type="retriever")
+def retrieve_reviews_data(query, item_list, k=5):
+
+    query_embedding = get_embedding(query)
+
+    results = qdrant_client.get().query_points(
+        collection_name=config.RAG_COLLECTIONS["reviews"],
+        prefetch=[
+            Prefetch(
+                query=query_embedding,
+                filter=Filter(
+                    must=[
+                        FieldCondition(key="parent_asin", match=MatchAny(any=item_list))
+                    ]
+                ),
+                limit=20,
+            )
+        ],
+        query=FusionQuery(fusion="rrf"),
+        limit=k,
+    )
+
+    retrieved_context_ids = []
+    retrieved_context = []
+    similarity_scores = []
+
+    for result in results.points:
+        retrieved_context_ids.append(result.payload["parent_asin"])
+        retrieved_context.append(result.payload["text"])
+        similarity_scores.append(result.score)
+
+    return {
+        "retrieved_context_ids": retrieved_context_ids,
+        "retrieved_context": retrieved_context,
+        "similarity_scores": similarity_scores,
+    }
+
+
+@traceable(name="format_retrieved_reviews_context", run_type="prompt")
+def process_reviews_context(context):
+
+    formatted_context = ""
+
+    for id, chunk in zip(
+        context["retrieved_context_ids"], context["retrieved_context"]
+    ):
+        formatted_context += f"- ID: {id}, review: {chunk}\n"
+
+    return formatted_context
+
+
 @traceable(
     process_inputs=hide_sensitive_inputs,
     name="retrieve_data",
@@ -145,20 +173,19 @@ def rerank(
 )
 def retrieve_data(
     query: str,
-    qdrant_client: QdrantClient,
     extra_options: RAGRequestExtraOptions,
 ) -> RAGRetrievedContext:
 
     query_embedding = get_embedding(query)
 
-    results = qdrant_client.query_points(
-        collection_name=collection_name,
+    results = qdrant_client.get().query_points(
+        collection_name=config.RAG_COLLECTIONS["items"],
         # prefetch retrieves data using both vector and sparse search and it applies before
         # the actual fusion of the results happens (for costs optimization).
         # prefetches are multiple independent searches that get combined later
         prefetch=[
             # semantic search using vector embeddings
-            Prefetch(query=query_embedding, using=embedding_model, limit=20),
+            Prefetch(query=query_embedding, using=config.RAG_EMBEDDING_MODEL, limit=20),
             # sparse search using BM25
             Prefetch(
                 query=Document(text=query, model="qdrant/bm25"), using="bm25", limit=20
@@ -168,7 +195,7 @@ def retrieve_data(
         # it applies after prefetching (20 vectors from each search in this case). This method also
         # orders the results based on their combined relevance, so that the first k results are the most relevant ones.
         query=FusionQuery(fusion="rrf"),
-        # the final number of results to return after fusion are only the top k (5 in this case)
+        # the final number of results to return after fusion are only the top k
         limit=extra_options.top_k,
     )
 
@@ -210,8 +237,8 @@ def process_context(context: RAGRetrievedContext) -> str:
     name="build_prompt",
     run_type="prompt",
 )
-def build_prompt(prompt_key: str, preprocessed_context: str, question: str) -> str:
-    template = prompt_template_config(prompt_yaml_filepath, prompt_key)
+def build_prompt(preprocessed_context: str, question: str) -> str:
+    template = prompt_template_config(retrieval_generation_prompt)
     prompt = template.render(
         preprocessed_context=preprocessed_context, question=question
     )
@@ -256,8 +283,9 @@ def generate_answer(
 def rag_pipeline(
     app_config: Config,
     payload: RAGRequest,
-    qdrant_client: QdrantClient,
 ) -> dict:
+
+    current_run = get_current_run_tree()
 
     # retrieve the extra options from the payload; if not provided, use default values
     extra_options: RAGRequestExtraOptions = (
@@ -266,13 +294,10 @@ def rag_pipeline(
 
     retrieved_context: RAGRetrievedContext = retrieve_data(
         payload.query,
-        qdrant_client,
         extra_options,
     )
     preprocessed_context = process_context(retrieved_context)
-    prompt = build_prompt(
-        app_config.RAG_PROMPT_KEY, preprocessed_context, payload.query
-    )
+    prompt = build_prompt(preprocessed_context, payload.query)
     output: StructuredResponse = generate_answer(
         app_config, payload.provider, payload.model_name, prompt
     )
@@ -295,11 +320,12 @@ def rag_pipeline(
         # as the matching value for the search
         # since we need to make an hybrid search query, we can't use scroll method, so we do a query_points call
         found = (
-            qdrant_client.query_points(
-                collection_name=collection_name,
+            qdrant_client.get()
+            .query_points(
+                collection_name=config.RAG_COLLECTIONS["items"],
                 query=np.zeros(1536).tolist(),
                 limit=1,
-                using=embedding_model,
+                using=config.RAG_EMBEDDING_MODEL,
                 with_payload=True,
                 query_filter=Filter(
                     must=[
@@ -324,10 +350,16 @@ def rag_pipeline(
             )
         )
 
+    # store here the current trace id from langsmith
+    trace_id: Optional[str] = None
+    if current_run:
+        trace_id = str(getattr(current_run, "trace_id", current_run.id))
+
     return {
         "answer": result["answer"],
         "used_context": used_context,
         "question": payload.query,
         "retrieved_context_ids": retrieved_context.retrieved_context_ids,
         "retrieved_context": retrieved_context.retrieved_context,
+        "trace_id": trace_id,
     }

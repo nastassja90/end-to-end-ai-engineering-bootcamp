@@ -1,29 +1,61 @@
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, TypeAlias
 from pydantic import BaseModel, Field
 from operator import add
+from api.core.constants import DEFAULT_TOP_K
 
 
-class ToolCallArguments(BaseModel):
-    """Explicit arguments structure for tool calls. Gemini requires explicit field definitions."""
+class __ToolCallGetFormattedContextArguments(BaseModel):
+    """Explicit arguments structure for get_formatted_context tool calls. Gemini requires explicit field definitions."""
 
     query: str = Field(
         ...,
         description="The search query to find relevant products. Extract keywords from the user's question.",
     )
     top_k: int = Field(
-        default=5,
-        description="The number of results to retrieve. Default is 5.",
+        default=DEFAULT_TOP_K,
+        description="The number of results to retrieve.",
     )
+
+
+class __ToolCallGetFormattedReviewsContextArguments(BaseModel):
+    """Explicit arguments structure for get_formatted_reviews_context tool calls. Gemini requires explicit field definitions."""
+
+    query: str = Field(
+        ...,
+        description="The search query to find relevant reviews. Extract keywords from the user's question.",
+    )
+    item_list: List[str] = Field(
+        ...,
+        description="The list of item IDs to prefilter for before running the query.",
+    )
+    top_k: int = Field(
+        default=15,
+        description="The number of reviews to retrieve, this should be at least 20 if multiple items are prefiltered.",
+    )
+
+
+ToolCallArguments: TypeAlias = (
+    __ToolCallGetFormattedContextArguments
+    | __ToolCallGetFormattedReviewsContextArguments
+)
+"""Union type for tool call arguments."""
 
 
 class ToolCall(BaseModel):
+    """Represents a tool invocation with a strict tool name and its arguments.
+
+    Attributes:
+        name: Exact tool name to invoke (e.g., 'get_formatted_context').
+        arguments: Arguments passed to the tool, including a required 'query'.
+    """
+
     name: str = Field(
         ...,
-        description="The exact name of the tool to call. Must be 'get_formatted_context'.",
+        description="The exact name of the tool to call. Must be 'get_formatted_context', 'get_formatted_reviews_context', etc...",
     )
     arguments: ToolCallArguments = Field(
         ...,
-        description="The arguments to pass to the tool. Must include 'query' with search keywords.",
+        description="The arguments to pass to the tool. Must include 'query' with search keywords, along with any other required parameters.",
     )
 
 
@@ -78,6 +110,8 @@ class State(BaseModel):
     iteration: int = 0
     answer: str = ""
     available_tools: List[Dict[str, Any]] = []
+    top_k: int = DEFAULT_TOP_K
     tool_calls: List[ToolCall] = []
     final_answer: bool = False
     references: Annotated[List[ReferencedItem], add] = []
+    trace_id: str = ""

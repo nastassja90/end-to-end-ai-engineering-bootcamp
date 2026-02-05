@@ -20,7 +20,7 @@ prompts:
     - name: The tool name (must be "get_formatted_context")
     - arguments: An object with these fields:
       - query (REQUIRED): The search keywords extracted from the user's question
-      - top_k (optional): Number of results, defaults to 5
+      - top_k (REQUIRED): Number of results to retrieve. You MUST always pass top_k={{ top_k }}
 
     CRITICAL: The "query" field inside arguments is MANDATORY. Extract relevant keywords from the user's question.
 

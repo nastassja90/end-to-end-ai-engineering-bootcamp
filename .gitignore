@@ -215,3 +215,6 @@ data/
 
 # Exclude the Qdrant storage local folder
 qdrant_storage/
+
+# Exclude the Postgres data folder
+postgres_data/

@@ -1,7 +1,8 @@
 import ast
 import inspect
 from typing import Dict, Any
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
+import json
 
 
 #### FORMAT AI MESSAGE ####
@@ -12,11 +13,9 @@ def format_ai_message(response):
     if response.tool_calls:
         tool_calls = []
         for i, tc in enumerate(response.tool_calls):
-            # Convert ToolCallArguments to dict if it's a Pydantic model
-            args = tc.arguments
-            if hasattr(args, "model_dump"):
-                args = args.model_dump()
-            tool_calls.append({"id": f"call_{i}", "name": tc.name, "args": args})
+            tool_calls.append(
+                {"id": f"call_{i}", "name": tc.name, "args": tc.arguments}
+            )
 
         ai_message = AIMessage(content=response.answer, tool_calls=tool_calls)
     else:
@@ -89,12 +88,7 @@ def parse_function_definition(function_def: str) -> Dict[str, Any]:
         # Check for default value
         default_idx = i - (num_args - num_defaults)
         if default_idx >= 0:
-            default_node = defaults[default_idx]
-            try:
-                param_info["default"] = ast.literal_eval(ast.unparse(default_node))
-            except (ValueError, SyntaxError):
-                # If the default is a variable reference (like DEFAULT_TOP_K), use its string representation
-                param_info["default"] = ast.unparse(default_node)
+            param_info["default"] = ast.literal_eval(ast.unparse(defaults[default_idx]))
         else:
             result["required"].append(arg.arg)
 

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
+from api.core.constants import DEFAULT_TOP_K, MAX_TOP_K
 
 
 ExecutionType = Literal["pipeline", "agent"]
@@ -8,7 +9,8 @@ ExecutionType = Literal["pipeline", "agent"]
 
 class RAGRequestExtraOptions(BaseModel):
     top_k: int = Field(
-        5, description="The number of top relevant documents to retrieve (default: 5)"
+        DEFAULT_TOP_K,
+        description="The number of top relevant documents to retrieve",
     )
     enable_reranking: bool = Field(
         False, description="Whether to enable re-ranking (default: False)"
@@ -23,6 +25,7 @@ class RAGRequest(BaseModel):
     provider: str = Field(..., description="The LLM provider to use")
     model_name: str = Field(..., description="The model name to use")
     query: str = Field(..., description="The query to be used in the RAG pipeline")
+    thread_id: str = Field(..., description="The thread ID for the conversation")
     extra_options: Optional[RAGRequestExtraOptions] = Field(
         None,
         description="Additional options for the RAG pipeline",
@@ -44,6 +47,7 @@ class RAGResponse(BaseModel):
         default=[],
         description="The contextual info for each item used to generate the answer",
     )
+    trace_id: str = Field("", description="The trace ID for the request")
 
 
 class ConfigResponse(BaseModel):
@@ -51,3 +55,27 @@ class ConfigResponse(BaseModel):
         ..., description="Dictionary of providers and their available models"
     )
     providers: list[str] = Field(..., description="List of available providers")
+    top_k: dict[str, int] = Field(
+        {
+            "default": DEFAULT_TOP_K,
+            "max": MAX_TOP_K,
+        },
+        description="Top k configuration",
+    )
+
+
+class FeedbackRequest(BaseModel):
+    feedback_score: Union[int, None] = Field(
+        ..., description="1 if the feedback is positive, 0 if the feedback is negative"
+    )
+    feedback_text: str = Field(..., description="The feedback text")
+    trace_id: str = Field(..., description="The trace ID")
+    thread_id: str = Field(..., description="The thread ID")
+    feedback_source_type: str = Field(
+        ..., description="The type of feedback. Human or API"
+    )
+
+
+class FeedbackResponse(BaseModel):
+    request_id: str = Field(..., description="The request ID")
+    status: str = Field(..., description="The status of the feedback submission")

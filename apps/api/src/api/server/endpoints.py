@@ -1,11 +1,16 @@
 from fastapi import Request, APIRouter
-from api.server.models import RAGRequest, RAGResponse, ConfigResponse
-from api.core.config import Config
+from api.server.models import (
+    RAGRequest,
+    RAGResponse,
+    ConfigResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+)
+from api.core.config import config
 from api.core.constants import MODELS, OPENAI, GROQ, GOOGLE
-
-from qdrant_client import QdrantClient
-from api.agents.rag import rag_pipeline
+from api.agents.rag.rag import rag_pipeline
 from api.agents.agents import rag_agent
+from api.server.processors.feedback import submit_feedback
 
 import logging
 
@@ -14,10 +19,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-config = Config()
-
-qdrant_client = QdrantClient(url=config.QDRANT_URL)
 
 rag_router = APIRouter()
 
@@ -36,13 +37,13 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
     result = executor(
         app_config=config,
         payload=payload,
-        qdrant_client=qdrant_client,
     )
 
     return RAGResponse(
         request_id=request.state.request_id,
         answer=result["answer"],
         used_context=result["used_context"],
+        trace_id=result["trace_id"],
     )
 
 
@@ -58,6 +59,23 @@ def get_config() -> ConfigResponse:
     )
 
 
+feedback_router = APIRouter()
+
+
+@feedback_router.post("/")
+def send_feedback(request: Request, payload: FeedbackRequest) -> FeedbackResponse:
+
+    submit_feedback(
+        payload.trace_id,
+        payload.feedback_score,
+        payload.feedback_text,
+        payload.feedback_source_type,
+    )
+
+    return FeedbackResponse(request_id=request.state.request_id, status="success")
+
+
 api_router = APIRouter()
 api_router.include_router(config_router, prefix="/config", tags=["config"])
 api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
+api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"])

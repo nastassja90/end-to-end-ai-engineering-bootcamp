@@ -1,13 +1,14 @@
-from qdrant_client import QdrantClient
 import numpy as np
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from api.server.models import RAGRequest
 from api.core.config import Config
-from api.agents.tools.tools import get_formatted_context
+from api.core.qdrant import qdrant_client
+from api.agents.tools.tools import get_formatted_context, get_formatted_reviews_context
 from api.agents.internal.graph import init_workflow
 from api.utils.utils import get_tool_descriptions
 from langsmith import traceable
 from api.utils.tracing import hide_sensitive_inputs
+from langgraph.checkpoint.postgres import PostgresSaver
 
 
 #### Agent Execution Function
@@ -22,18 +23,25 @@ def run_agent(
     payload: RAGRequest,
 ) -> dict:
 
-    tools = [get_formatted_context]
+    tools = [get_formatted_context, get_formatted_reviews_context]
     tool_descriptions = get_tool_descriptions(tools)
 
     initial_state = {
         "messages": [{"role": "user", "content": payload.query}],
         "iteration": 0,
         "available_tools": tool_descriptions,
+        # Add top_k to the initial state only if it's provided in extra_options
+        **({"top_k": payload.extra_options.top_k} if payload.extra_options else {}),
     }
 
-    workflow = init_workflow(app_config, payload, tools)
-    graph = workflow.compile()
-    return graph.invoke(initial_state)
+    config = {"configurable": {"thread_id": payload.thread_id}}
+
+    with PostgresSaver.from_conn_string(
+        app_config.POSTGRES_CONNECTION_STRING
+    ) as checkpointer:
+        workflow = init_workflow(app_config, payload, tools)
+        graph = workflow.compile(checkpointer=checkpointer)
+        return graph.invoke(initial_state, config=config)
 
 
 @traceable(
@@ -43,7 +51,6 @@ def run_agent(
 def rag_agent(
     app_config: Config,
     payload: RAGRequest,
-    qdrant_client: QdrantClient,
 ):
 
     result = run_agent(app_config, payload)
@@ -52,8 +59,9 @@ def rag_agent(
 
     for item in result.get("references", []):
         payload = (
-            qdrant_client.query_points(
-                collection_name=app_config.RAG_COLLECTION_NAME,
+            qdrant_client.get()
+            .query_points(
+                collection_name=app_config.RAG_COLLECTIONS["items"],
                 query=dummy_vector,
                 limit=1,
                 using=app_config.RAG_EMBEDDING_MODEL,
@@ -83,4 +91,5 @@ def rag_agent(
     return {
         "answer": result.get("answer", ""),
         "used_context": used_context,
+        "trace_id": result.get("trace_id", ""),
     }

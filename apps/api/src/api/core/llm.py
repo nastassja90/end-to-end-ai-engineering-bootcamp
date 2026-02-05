@@ -126,14 +126,23 @@ def run_llm(
     client: instructor.Instructor | None = None
 
     if provider == GOOGLE:
-        client = instructor.from_genai(Gemini(api_key=app_config.GOOGLE_API_KEY))
-        # Gemini requires specific message format conversion (roles, system handling, etc.)
-        gemini_messages = convert_messages_for_gemini(messages)
-        return client.chat.completions.create_with_completion(
-            model=model_name,
-            messages=gemini_messages,
-            response_model=StructuredResponse,
+        # Use GENAI_STRUCTURED_OUTPUTS mode for Gemini to avoid MALFORMED_FUNCTION_CALL errors
+        # Gemini gets confused when StructuredResponse contains tool_calls field with GENAI_TOOLS mode
+        client = instructor.from_genai(
+            Gemini(api_key=app_config.GOOGLE_API_KEY),
+            mode=Mode.GENAI_STRUCTURED_OUTPUTS,
         )
+        # Gemini requires specific message format conversion (roles, system handling, etc.)
+        try:
+            gemini_messages = convert_messages_for_gemini(messages)
+            return client.chat.completions.create_with_completion(
+                model=model_name,
+                messages=gemini_messages,
+                response_model=StructuredResponse,
+            )
+        except Exception as e:
+            print(f"ERROR in Gemini LLM call: {type(e).__name__}: {e}")
+            raise e
     elif provider == GROQ:
         # Use JSON mode for Groq to avoid tool_use_failed errors
         # Groq sometimes generates <function=...> format instead of valid JSON in TOOLS mode

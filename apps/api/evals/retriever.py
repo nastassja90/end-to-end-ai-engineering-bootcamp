@@ -1,17 +1,14 @@
 # Evals for the retriever component of the RAG pipeline.
 
-from api.core.config import Config
+from api.core.config import config
 from api.core.constants import OPENAI, MODELS
 from api.server.models import RAGRequest
-from api.agents.rag import rag_pipeline
+from api.agents.rag.rag import rag_pipeline
 import os
 
-from qdrant_client import QdrantClient
-
 from langsmith import Client
-from qdrant_client import QdrantClient
 
-from api.utils.ragas import (
+from api.utils.metrics import (
     ragas_context_precision_id_based,
     ragas_context_recall_id_based,
     ragas_faithfulness,
@@ -22,11 +19,8 @@ os.environ["LANGCHAIN_CONCURRENCY_LIMIT"] = "10"
 # disable langsmith tracing for evals
 os.environ["LANGSMITH_TRACING"] = "false"
 
-# Load configuration
-config = Config()
 
 ls_client = Client(api_key=config.LANGSMITH_API_KEY)
-qdrant_client = QdrantClient(url=config.QDRANT_URL)
 
 
 def target_function(inputs: dict) -> dict:
@@ -41,7 +35,6 @@ def target_function(inputs: dict) -> dict:
         result = rag_pipeline(
             app_config=config,
             payload=payload,
-            qdrant_client=qdrant_client,
         )
         return result
     except Exception as e:

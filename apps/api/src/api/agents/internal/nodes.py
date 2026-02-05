@@ -1,3 +1,4 @@
+from typing import Optional
 from api.agents.internal.models import IntentRouterResponse, State
 from langsmith import traceable, get_current_run_tree
 
@@ -5,11 +6,12 @@ from langchain_core.messages import convert_to_openai_messages
 from openai import OpenAI
 import instructor
 from api.core.config import Config
+from api.core.constants import OPENAI
 
 from api.utils.tracing import hide_sensitive_inputs
-from api.utils.prompts import prompt_template_config
+from api.agents.prompts.prompts import prompt_template_config
 from api.utils.utils import format_ai_message
-from api.utils.llm import (
+from api.core.llm import (
     run_llm,
     extract_usage_metadata,
 )
@@ -22,11 +24,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-qa_agent_prompt_yaml_filepath = "api/agents/prompts/qa_agent.yaml"
-"""Path to the YAML file containing the QA agent prompt template."""
-intent_router_agent_prompt_yaml_filepath = "api/agents/prompts/intent_router_agent.yaml"
-"""Path to the YAML file containing the Intent Router agent prompt template."""
-
+qa_agent_prompt = "qa_agent"
+"""Prompt ID containing the QA agent prompt template."""
+intent_router_agent_prompt = "intent_router_agent"
+"""Prompt ID containing the Intent Router agent prompt template."""
 
 ### QnA Agent Node
 
@@ -47,8 +48,10 @@ def agent_node(
             current_run.metadata["ls_provider"] = provider
             current_run.metadata["ls_model_name"] = model_name
 
-        template = prompt_template_config(qa_agent_prompt_yaml_filepath, "qa_agent")
-        prompt = template.render(available_tools=state.available_tools)
+        template = prompt_template_config(qa_agent_prompt)
+        prompt = template.render(
+            available_tools=state.available_tools, top_k=state.top_k
+        )
 
         acc = []
         for message in state.messages:
@@ -101,13 +104,12 @@ def agent_node(
     process_inputs=hide_sensitive_inputs,
     name="intent_router_node",
     run_type="llm",
-    metadata={"ls_provider": "openai", "ls_model_name": "gpt-4.1-mini"},
+    metadata={"ls_provider": f"{OPENAI}", "ls_model_name": "gpt-4.1-mini"},
 )
 def intent_router_node(state: State):
+    current_run = get_current_run_tree()
 
-    template = prompt_template_config(
-        intent_router_agent_prompt_yaml_filepath, "intent_router_agent"
-    )
+    template = prompt_template_config(intent_router_agent_prompt)
 
     prompt = template.render()
 
@@ -127,4 +129,17 @@ def intent_router_node(state: State):
         temperature=0.5,
     )
 
-    return {"question_relevant": response.question_relevant, "answer": response.answer}
+    # store here the current trace id from langsmith
+    trace_id: Optional[str] = None
+
+    if current_run:
+        current_run.metadata["usage_metadata"] = extract_usage_metadata(
+            raw_response, OPENAI
+        )
+        trace_id = str(getattr(current_run, "trace_id", current_run.id))
+
+    return {
+        "question_relevant": response.question_relevant,
+        "answer": response.answer,
+        "trace_id": trace_id,
+    }
