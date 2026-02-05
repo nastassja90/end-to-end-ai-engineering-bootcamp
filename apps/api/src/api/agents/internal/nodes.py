@@ -5,8 +5,7 @@ from langsmith import traceable, get_current_run_tree
 from langchain_core.messages import convert_to_openai_messages
 from openai import OpenAI
 import instructor
-from api.core.config import Config
-from api.core.constants import OPENAI
+from api.core.config import Config, OPENAI
 
 from api.utils.tracing import hide_sensitive_inputs
 from api.agents.prompts.prompts import prompt_template_config

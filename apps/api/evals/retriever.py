@@ -1,7 +1,6 @@
 # Evals for the retriever component of the RAG pipeline.
 
-from api.core.config import config
-from api.core.constants import OPENAI, MODELS
+from api.core.config import config, OPENAI, MODELS
 from api.server.models import RAGRequest
 from api.agents.rag.rag import rag_pipeline
 import os

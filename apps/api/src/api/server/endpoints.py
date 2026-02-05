@@ -6,8 +6,7 @@ from api.server.models import (
     FeedbackRequest,
     FeedbackResponse,
 )
-from api.core.config import config
-from api.core.constants import MODELS, OPENAI, GROQ, GOOGLE
+from api.core.config import config, MODELS, OPENAI, GROQ, GOOGLE
 from api.agents.rag.rag import rag_pipeline
 from api.agents.agents import rag_agent
 from api.server.processors.feedback import submit_feedback
@@ -28,7 +27,6 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
     logger.info(
         f"RAG request received. Request ID: {request.state.request_id}, Question: {payload.query}"
     )
-    logger.info(f"Using prompt key: {config.RAG_PROMPT_KEY}")
 
     executor = rag_pipeline
     if payload.execution_type == "agent":

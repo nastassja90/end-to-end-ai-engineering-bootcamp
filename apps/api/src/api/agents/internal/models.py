@@ -1,7 +1,7 @@
 from typing import Annotated, Any, Dict, List, Optional, TypeAlias
 from pydantic import BaseModel, Field
 from operator import add
-from api.core.constants import DEFAULT_TOP_K
+from api.core.config import DEFAULT_TOP_K
 
 
 class __ToolCallGetFormattedContextArguments(BaseModel):

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, Union
-from api.core.constants import DEFAULT_TOP_K, MAX_TOP_K
+from api.core.config import DEFAULT_TOP_K, MAX_TOP_K
 
 
 ExecutionType = Literal["pipeline", "agent"]

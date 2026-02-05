@@ -4,7 +4,7 @@ from api.agents.rag.rag import (
     process_reviews_context,
     retrieve_reviews_data,
 )
-from api.core.constants import DEFAULT_TOP_K
+from api.core.config import DEFAULT_TOP_K
 from api.server.models import RAGRequestExtraOptions
 from api.utils.tracing import hide_sensitive_inputs
 from langsmith import traceable

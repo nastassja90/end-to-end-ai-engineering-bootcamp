@@ -5,8 +5,7 @@ from groq import Groq
 from groq.types.chat import ChatCompletion as GroqChatCompletion
 from google.genai import Client as Gemini
 from google.genai.types import GenerateContentResponse
-from api.core.config import Config
-from api.core.constants import GROQ, GOOGLE
+from api.core.config import Config, GROQ, GOOGLE
 from api.agents.internal.models import StructuredResponse
 import instructor
 from instructor import Mode

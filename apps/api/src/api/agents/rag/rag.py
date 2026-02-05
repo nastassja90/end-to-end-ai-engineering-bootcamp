@@ -5,7 +5,13 @@ from cohere import V2RerankResponse as CohereRerankResponse
 
 from api.core.cohere import cohere_client
 from api.agents.internal.models import RAGRetrievedContext
-from api.core.config import Config, config
+from api.core.config import (
+    RAG_COLLECTIONS,
+    RAG_EMBEDDING_MODEL,
+    RAG_RERANKING_MODEL,
+    Config,
+    config,
+)
 from api.core.qdrant import qdrant_client
 from api.server.models import RAGRequest, RAGUsedContextItem, RAGRequestExtraOptions
 from api.utils.tracing import hide_sensitive_inputs
@@ -36,9 +42,9 @@ retrieval_generation_prompt = "retrieval_generation"
     process_inputs=hide_sensitive_inputs,
     name="embed_query",
     run_type="embedding",
-    metadata={"ls_provider": "openai", "ls_model_name": config.RAG_EMBEDDING_MODEL},
+    metadata={"ls_provider": "openai", "ls_model_name": RAG_EMBEDDING_MODEL},
 )
-def get_embedding(text: str, model: str = config.RAG_EMBEDDING_MODEL) -> list[float]:
+def get_embedding(text: str, model: str = RAG_EMBEDDING_MODEL) -> list[float]:
     response = openai.embeddings.create(
         input=text,
         model=model,
@@ -83,7 +89,7 @@ def rerank(
     reranked_context = RAGRetrievedContext()
 
     rerank: CohereRerankResponse = cohere_client.get().rerank(
-        model=config.RAG_RERANKING_MODEL,
+        model=RAG_RERANKING_MODEL,
         query=query,
         documents=original_context.retrieved_context,
         top_n=top_k,
@@ -121,7 +127,7 @@ def retrieve_reviews_data(query, item_list, k=5):
     query_embedding = get_embedding(query)
 
     results = qdrant_client.get().query_points(
-        collection_name=config.RAG_COLLECTIONS["reviews"],
+        collection_name=RAG_COLLECTIONS["reviews"],
         prefetch=[
             Prefetch(
                 query=query_embedding,
@@ -179,13 +185,13 @@ def retrieve_data(
     query_embedding = get_embedding(query)
 
     results = qdrant_client.get().query_points(
-        collection_name=config.RAG_COLLECTIONS["items"],
+        collection_name=RAG_COLLECTIONS["items"],
         # prefetch retrieves data using both vector and sparse search and it applies before
         # the actual fusion of the results happens (for costs optimization).
         # prefetches are multiple independent searches that get combined later
         prefetch=[
             # semantic search using vector embeddings
-            Prefetch(query=query_embedding, using=config.RAG_EMBEDDING_MODEL, limit=20),
+            Prefetch(query=query_embedding, using=RAG_EMBEDDING_MODEL, limit=20),
             # sparse search using BM25
             Prefetch(
                 query=Document(text=query, model="qdrant/bm25"), using="bm25", limit=20
@@ -322,10 +328,10 @@ def rag_pipeline(
         found = (
             qdrant_client.get()
             .query_points(
-                collection_name=config.RAG_COLLECTIONS["items"],
+                collection_name=RAG_COLLECTIONS["items"],
                 query=np.zeros(1536).tolist(),
                 limit=1,
-                using=config.RAG_EMBEDDING_MODEL,
+                using=RAG_EMBEDDING_MODEL,
                 with_payload=True,
                 query_filter=Filter(
                     must=[

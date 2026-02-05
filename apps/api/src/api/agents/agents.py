@@ -1,7 +1,7 @@
 import numpy as np
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from api.server.models import RAGRequest
-from api.core.config import Config
+from api.core.config import Config, RAG_COLLECTIONS, RAG_EMBEDDING_MODEL
 from api.core.qdrant import qdrant_client
 from api.agents.tools.tools import get_formatted_context, get_formatted_reviews_context
 from api.agents.internal.graph import init_workflow
@@ -61,10 +61,10 @@ def rag_agent(
         payload = (
             qdrant_client.get()
             .query_points(
-                collection_name=app_config.RAG_COLLECTIONS["items"],
+                collection_name=RAG_COLLECTIONS["items"],
                 query=dummy_vector,
                 limit=1,
-                using=app_config.RAG_EMBEDDING_MODEL,
+                using=RAG_EMBEDDING_MODEL,
                 with_payload=True,
                 query_filter=Filter(
                     must=[

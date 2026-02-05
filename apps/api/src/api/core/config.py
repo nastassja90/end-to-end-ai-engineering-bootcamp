@@ -20,6 +20,17 @@ DEFAULT_TOP_K: int = 5
 MAX_TOP_K: int = 20
 """Maximum value for the number of relevant documents to retrieve in the RAG pipeline."""
 
+"""Default RAG prompt key to customize the prompt used in the RAG pipeline"""
+RAG_COLLECTIONS: dict[str, str] = {
+    "items": "Amazon-items-collection-01-hybrid-search",
+    "reviews": "Amazon-items-collection-01-reviews",
+}
+"""Qdrant collection names for RAG operations"""
+RAG_EMBEDDING_MODEL: str = "text-embedding-3-small"
+"""The text embedding model to use for both indexing and querying in the RAG pipeline"""
+RAG_RERANKING_MODEL: str = "rerank-v4.0-fast"
+"""The reranking model to use in the RAG pipeline"""
+
 
 class Config(BaseSettings):
     """Configuration settings for the API application."""
@@ -38,17 +49,6 @@ class Config(BaseSettings):
     LANGSMITH_ENDPOINT: str
     LANGSMITH_PROJECT: str
     LANGSMITH_API_KEY: str
-    RAG_PROMPT_KEY: str = "retrieval_generation"
-    """Default RAG prompt key to customize the prompt used in the RAG pipeline"""
-    RAG_COLLECTIONS: dict[str, str] = {
-        "items": "Amazon-items-collection-01-hybrid-search",
-        "reviews": "Amazon-items-collection-01-reviews",
-    }
-    """Qdrant collection names for RAG operations"""
-    RAG_EMBEDDING_MODEL: str = "text-embedding-3-small"
-    """The text embedding model to use for both indexing and querying in the RAG pipeline"""
-    RAG_RERANKING_MODEL: str = "rerank-v4.0-fast"
-    """The reranking model to use in the RAG pipeline"""
 
     model_config = SettingsConfigDict(env_file=".env")
 
