@@ -3,6 +3,7 @@ import requests
 from chatbot_ui.core.config import config
 import uuid
 import logging
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +35,31 @@ app_config = fetch_app_config()
 MODELS = app_config.get("models", {})
 PROVIDERS = app_config.get("providers", [])
 TOP_K = app_config.get("top_k", {"default": 5, "max": 20})
+
+
+def api_call_stream(method, url, **kwargs):
+
+    def _show_error_popup(message):
+        """Show error message as a popup in the top-right corner."""
+        st.session_state["error_popup"] = {
+            "visible": True,
+            "message": message,
+        }
+
+    try:
+        response = getattr(requests, method)(url, **kwargs)
+
+        return response.iter_lines()
+
+    except requests.exceptions.ConnectionError:
+        _show_error_popup("Connection error. Please check your network connection.")
+        return False, {"message": "Connection error"}
+    except requests.exceptions.Timeout:
+        _show_error_popup("The request timed out. Please try again later.")
+        return False, {"message": "Request timeout"}
+    except Exception as e:
+        _show_error_popup(f"An unexpected error occurred: {str(e)}")
+        return False, {"message": str(e)}
 
 
 def api_call(method, url, **kwargs):
@@ -134,6 +160,11 @@ with st.sidebar:
 
     # Advanced Options section
     st.subheader("Advanced Options")
+    enable_streaming = st.checkbox(
+        "Enable Streaming",
+        value=False,
+        disabled=(execution_type == "pipeline"),
+    )
     enable_reranking = st.checkbox("Enable Re-ranking", value=False)
     top_k = st.slider(
         "Number of Contexts to Retrieve (top_k)",
@@ -142,6 +173,7 @@ with st.sidebar:
         value=TOP_K["default"],
     )
     # save to session state
+    st.session_state.enable_streaming = enable_streaming
     st.session_state.enable_reranking = enable_reranking
     st.session_state.top_k = top_k
 
@@ -274,7 +306,8 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        json = {
+
+        payload = {
             "execution_type": st.session_state.execution_type,
             "provider": st.session_state.provider,
             "model_name": st.session_state.model_name,
@@ -285,16 +318,61 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
                 "enable_reranking": st.session_state.enable_reranking,
             },
         }
-        status, output = api_call("post", f"{config.API_URL}/rag", json=json)
-        answer = output["answer"]
-        used_context = output["used_context"]
-        trace_id = output["trace_id"]
-        st.session_state.trace_id = trace_id
 
-        # set the used_context into the state
-        st.session_state.used_context = used_context
-        st.write(answer)
+        if (
+            st.session_state.enable_streaming
+            and st.session_state.execution_type == "agent"
+        ):
+            status_placeholder = st.empty()
+            message_placeholder = st.empty()
+            for line in api_call_stream(
+                "post",
+                f"{config.API_URL}/rag/stream",
+                json=payload,
+                stream=True,
+                headers={"Accept": "text/event-stream"},
+            ):
+                line_text = line.decode("utf-8")
+                if line_text.startswith("data: "):
+                    data = line_text[6:]
 
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+                    try:
+                        output = json.loads(data)
+
+                        if output["type"] == "final_result":
+                            answer = output["data"]["answer"]
+                            used_context = output["data"]["used_context"]
+                            trace_id = output["data"]["trace_id"]
+
+                            st.session_state.used_context = used_context
+                            st.session_state.messages.append(
+                                {"role": "assistant", "content": answer}
+                            )
+                            st.session_state.trace_id = trace_id
+
+                            st.session_state.latest_feedback = None
+                            st.session_state.show_feedback_box = False
+                            st.session_state.feedback_submission_status = None
+
+                            status_placeholder.empty()
+                            message_placeholder.markdown(answer)
+                            break
+
+                    except json.JSONDecodeError:
+                        status_placeholder.markdown(f"*{data}*")
+
+        else:
+
+            status, output = api_call("post", f"{config.API_URL}/rag", json=payload)
+            answer = output["answer"]
+            used_context = output["used_context"]
+            trace_id = output["trace_id"]
+            st.session_state.trace_id = trace_id
+
+            # set the used_context into the state
+            st.session_state.used_context = used_context
+            st.write(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+
     # rerun to show the used context updated (images)
     st.rerun()

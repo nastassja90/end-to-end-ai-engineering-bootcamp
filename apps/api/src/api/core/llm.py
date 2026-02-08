@@ -5,7 +5,7 @@ from groq import Groq
 from groq.types.chat import ChatCompletion as GroqChatCompletion
 from google.genai import Client as Gemini
 from google.genai.types import GenerateContentResponse
-from api.core.config import Config, GROQ, GOOGLE
+from api.core.config import GROQ, GOOGLE, config
 from api.agents.internal.models import StructuredResponse
 import instructor
 from instructor import Mode
@@ -115,12 +115,29 @@ def extract_usage_metadata(response: LLMResponse, provider: str) -> dict:
 
 
 def run_llm(
-    app_config: Config,
     provider: str,
     model_name: str,
     messages,
     temperature: float = 0.0,
 ) -> Tuple[StructuredResponse, LLMResponse]:
+    """Run an LLM request using the configured provider and return a structured response.
+
+    Selects the appropriate client for Google Gemini, Groq, or OpenAI, applies
+    provider-specific modes and message conversions, and executes a chat completion
+    request with a StructuredResponse schema.
+
+    Args:
+        provider: Provider identifier (e.g., GOOGLE, GROQ, or default OpenAI).
+        model_name: Model name to use for the request.
+        messages: Chat messages payload for the model.
+        temperature: Sampling temperature for the request.
+
+    Returns:
+        A tuple of (StructuredResponse, LLMResponse) from the completion call.
+
+    Raises:
+        Exception: Propagates any errors raised during the Gemini call after logging.
+    """
 
     client: instructor.Instructor | None = None
 
@@ -128,7 +145,7 @@ def run_llm(
         # Use GENAI_STRUCTURED_OUTPUTS mode for Gemini to avoid MALFORMED_FUNCTION_CALL errors
         # Gemini gets confused when StructuredResponse contains tool_calls field with GENAI_TOOLS mode
         client = instructor.from_genai(
-            Gemini(api_key=app_config.GOOGLE_API_KEY),
+            Gemini(api_key=config.GOOGLE_API_KEY),
             mode=Mode.GENAI_STRUCTURED_OUTPUTS,
         )
         # Gemini requires specific message format conversion (roles, system handling, etc.)
@@ -146,11 +163,11 @@ def run_llm(
         # Use JSON mode for Groq to avoid tool_use_failed errors
         # Groq sometimes generates <function=...> format instead of valid JSON in TOOLS mode
         client = instructor.from_groq(
-            Groq(api_key=app_config.GROQ_API_KEY),
+            Groq(api_key=config.GROQ_API_KEY),
             mode=Mode.JSON,
         )
     else:  # default to OpenAI
-        client = instructor.from_openai(OpenAI(api_key=app_config.OPENAI_API_KEY))
+        client = instructor.from_openai(OpenAI(api_key=config.OPENAI_API_KEY))
 
     return client.chat.completions.create_with_completion(
         model=model_name,

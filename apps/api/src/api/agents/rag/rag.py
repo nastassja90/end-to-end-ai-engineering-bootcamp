@@ -1,27 +1,7 @@
 from typing import Optional
-import numpy as np
-import openai
+from numpy import zeros
+from openai import embeddings
 from cohere import V2RerankResponse as CohereRerankResponse
-
-from api.core.cohere import cohere_client
-from api.agents.internal.models import RAGRetrievedContext
-from api.core.config import (
-    RAG_COLLECTIONS,
-    RAG_EMBEDDING_MODEL,
-    RAG_RERANKING_MODEL,
-    Config,
-    config,
-)
-from api.core.qdrant import qdrant_client
-from api.server.models import RAGRequest, RAGUsedContextItem, RAGRequestExtraOptions
-from api.utils.tracing import hide_sensitive_inputs
-from api.agents.prompts.prompts import prompt_template_config
-from api.core.llm import (
-    run_llm,
-    extract_usage_metadata,
-    StructuredResponse,
-)
-
 from langsmith import traceable, get_current_run_tree
 from qdrant_client.models import (
     Filter,
@@ -33,19 +13,79 @@ from qdrant_client.models import (
     MatchAny,
 )
 
+from api.core.cohere import cohere_client
+from api.agents.internal.models import RAGRetrievedContext
+from api.core.qdrant import qdrant_client
+from api.server.models import RAGRequest, RAGUsedContextItem, RAGRequestExtraOptions
+from api.utils.tracing import hide_sensitive_inputs
+from api.agents.prompts.prompts import prompt_template_config
+from api.core.llm import (
+    run_llm,
+    extract_usage_metadata,
+    StructuredResponse,
+)
+from api.core.config import (
+    OPENAI,
+    RAG_COLLECTIONS,
+    RAG_EMBEDDING_MODEL,
+    RAG_RERANKING_MODEL,
+)
+
 
 retrieval_generation_prompt = "retrieval_generation"
 """Prompt ID containing RAG prompt templates."""
+
+
+def used_context(result: dict) -> list[RAGUsedContextItem]:
+    """Helper function to create the used context list for the final response based on the retrieved references and their corresponding metadata from Qdrant."""
+    # enrich references with image_url and price from qdrant
+    used_context: list[RAGUsedContextItem] = []
+
+    for item in result.get("references", []):
+        # find each reference item in qdrant to get its image_url and price, use the parent_asin field
+        # as the matching value for the search
+        # since we need to make an hybrid search query, we can't use scroll method, so we do a query_points call
+        found = (
+            qdrant_client.get()
+            .query_points(
+                collection_name=RAG_COLLECTIONS["items"],
+                query=zeros(1536).tolist(),
+                limit=1,
+                using=RAG_EMBEDDING_MODEL,
+                with_payload=True,
+                query_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="parent_asin", match=MatchValue(value=item.id)
+                        )
+                    ]
+                ),
+            )
+            .points[0]
+            .payload
+        )
+
+        # we expect only one point to be found
+        image_url = found.get("image", None)
+        price = found.get("price", 0.0)
+        used_context.append(
+            RAGUsedContextItem(
+                image_url=image_url,
+                price=price,
+                description=item.description,
+            )
+        )
+    return used_context
 
 
 @traceable(
     process_inputs=hide_sensitive_inputs,
     name="embed_query",
     run_type="embedding",
-    metadata={"ls_provider": "openai", "ls_model_name": RAG_EMBEDDING_MODEL},
+    metadata={"ls_provider": OPENAI, "ls_model_name": RAG_EMBEDDING_MODEL},
 )
 def get_embedding(text: str, model: str = RAG_EMBEDDING_MODEL) -> list[float]:
-    response = openai.embeddings.create(
+    response = embeddings.create(
         input=text,
         model=model,
     )
@@ -257,7 +297,6 @@ def build_prompt(preprocessed_context: str, question: str) -> str:
     run_type="llm",
 )
 def generate_answer(
-    app_config: Config,
     provider: str,
     model_name: str,
     prompt: str,
@@ -268,7 +307,6 @@ def generate_answer(
         current_run.metadata["ls_model_name"] = model_name
 
     output, original_response = run_llm(
-        app_config,
         provider,
         model_name,
         messages=[{"role": "system", "content": prompt}],
@@ -287,7 +325,6 @@ def generate_answer(
     name="rag_pipeline",
 )
 def rag_pipeline(
-    app_config: Config,
     payload: RAGRequest,
 ) -> dict:
 
@@ -305,7 +342,7 @@ def rag_pipeline(
     preprocessed_context = process_context(retrieved_context)
     prompt = build_prompt(preprocessed_context, payload.query)
     output: StructuredResponse = generate_answer(
-        app_config, payload.provider, payload.model_name, prompt
+        payload.provider, payload.model_name, prompt
     )
 
     result = {
@@ -318,44 +355,6 @@ def rag_pipeline(
         "similarity_scores": retrieved_context.similarity_scores,
     }
 
-    # enrich references with image_url and price from qdrant
-    used_context: list[RAGUsedContextItem] = []
-
-    for item in result.get("references", []):
-        # find each reference item in qdrant to get its image_url and price, use the parent_asin field
-        # as the matching value for the search
-        # since we need to make an hybrid search query, we can't use scroll method, so we do a query_points call
-        found = (
-            qdrant_client.get()
-            .query_points(
-                collection_name=RAG_COLLECTIONS["items"],
-                query=np.zeros(1536).tolist(),
-                limit=1,
-                using=RAG_EMBEDDING_MODEL,
-                with_payload=True,
-                query_filter=Filter(
-                    must=[
-                        FieldCondition(
-                            key="parent_asin", match=MatchValue(value=item.id)
-                        )
-                    ]
-                ),
-            )
-            .points[0]
-            .payload
-        )
-
-        # we expect only one point to be found
-        image_url = found.get("image", None)
-        price = found.get("price", 0.0)
-        used_context.append(
-            RAGUsedContextItem(
-                image_url=image_url,
-                price=price,
-                description=item.description,
-            )
-        )
-
     # store here the current trace id from langsmith
     trace_id: Optional[str] = None
     if current_run:
@@ -363,7 +362,7 @@ def rag_pipeline(
 
     return {
         "answer": result["answer"],
-        "used_context": used_context,
+        "used_context": used_context(result),
         "question": payload.query,
         "retrieved_context_ids": retrieved_context.retrieved_context_ids,
         "retrieved_context": retrieved_context.retrieved_context,

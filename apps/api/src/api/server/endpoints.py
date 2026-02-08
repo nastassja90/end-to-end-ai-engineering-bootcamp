@@ -1,4 +1,6 @@
 from fastapi import Request, APIRouter
+from fastapi.responses import StreamingResponse
+
 from api.server.models import (
     RAGRequest,
     RAGResponse,
@@ -8,7 +10,7 @@ from api.server.models import (
 )
 from api.core.config import config, MODELS, OPENAI, GROQ, GOOGLE
 from api.agents.rag.rag import rag_pipeline
-from api.agents.agents import rag_agent
+from api.agents.agents import rag_agent, rag_agent_stream
 from api.server.processors.feedback import submit_feedback
 
 import logging
@@ -33,7 +35,6 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
         executor = rag_agent
 
     result = executor(
-        app_config=config,
         payload=payload,
     )
 
@@ -42,6 +43,18 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
         answer=result["answer"],
         used_context=result["used_context"],
         trace_id=result["trace_id"],
+    )
+
+
+@rag_router.post("/stream")
+def rag(request: Request, payload: RAGRequest) -> StreamingResponse:
+    logger.info(
+        f"RAG request received. Request ID: {request.state.request_id}, Question: {payload.query}"
+    )
+
+    return StreamingResponse(
+        rag_agent_stream(payload),
+        media_type="text/event-stream",
     )
 
 

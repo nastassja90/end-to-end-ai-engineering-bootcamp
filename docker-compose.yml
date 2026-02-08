@@ -48,3 +48,27 @@ services:
     restart: unless-stopped
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+
+  items_mcp_server:
+    build:
+      context: .
+      dockerfile: apps/mcp/items/Dockerfile
+    ports:
+      - 8001:8000
+    env_file:
+      - .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    restart: unless-stopped
+
+  reviews_mcp_server:
+    build:
+      context: .
+      dockerfile: apps/mcp/reviews/Dockerfile
+    ports:
+      - 8002:8000
+    env_file:
+      - .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    restart: unless-stopped

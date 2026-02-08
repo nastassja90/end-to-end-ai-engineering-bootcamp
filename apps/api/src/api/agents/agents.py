@@ -1,14 +1,48 @@
-import numpy as np
-from qdrant_client.models import Filter, FieldCondition, MatchValue
-from api.server.models import RAGRequest
-from api.core.config import Config, RAG_COLLECTIONS, RAG_EMBEDDING_MODEL
-from api.core.qdrant import qdrant_client
-from api.agents.tools.tools import get_formatted_context, get_formatted_reviews_context
-from api.agents.internal.graph import init_workflow
-from api.utils.utils import get_tool_descriptions
+from json import dumps
+from typing import Generator, Optional
 from langsmith import traceable
-from api.utils.tracing import hide_sensitive_inputs
 from langgraph.checkpoint.postgres import PostgresSaver
+
+from api.server.models import RAGRequest
+from api.core.config import config
+from api.agents.rag.rag import used_context
+from api.agents.tools.tools import get_formatted_context, get_formatted_reviews_context
+from api.agents.internal.graph import init_workflow, process_graph_event
+from api.utils.utils import get_tool_descriptions
+from api.utils.tracing import hide_sensitive_inputs
+from api.utils.streaming import string_for_sse
+
+
+def __stream_agent(
+    payload: RAGRequest, tools, initial_state
+) -> Generator[str, None, dict]:
+    """Internal generator that yields intermediate SSE chunks and returns the final result.
+    Manages its own PostgreSQL connection to keep it alive during streaming."""
+    result = None
+    with PostgresSaver.from_conn_string(
+        config.POSTGRES_CONNECTION_STRING
+    ) as checkpointer:
+        workflow = init_workflow(payload, tools)
+        graph = workflow.compile(checkpointer=checkpointer)
+        conf = {"configurable": {"thread_id": payload.thread_id}}
+
+        for chunk in graph.stream(
+            initial_state,
+            config=conf,
+            # Only include debug and values chunks in the stream, as those are the ones we want to process for intermediate updates and the final result.
+            # debug: includes node start events that we use to generate intermediate status updates for the user
+            # values: includes the final result of the graph execution that we want to return at the end of the stream.
+            stream_mode=["debug", "values"],
+        ):
+            processed_chunk = process_graph_event(chunk)
+
+            if processed_chunk:
+                yield string_for_sse(processed_chunk)
+
+            if chunk[0] == "values":
+                result = chunk[1]
+
+    return result
 
 
 #### Agent Execution Function
@@ -19,9 +53,8 @@ from langgraph.checkpoint.postgres import PostgresSaver
     name="run_agent",
 )
 def run_agent(
-    app_config: Config,
-    payload: RAGRequest,
-) -> dict:
+    payload: RAGRequest, stream: bool = False
+) -> dict | Generator[str, None, dict]:
 
     tools = [get_formatted_context, get_formatted_reviews_context]
     tool_descriptions = get_tool_descriptions(tools)
@@ -34,14 +67,19 @@ def run_agent(
         **({"top_k": payload.extra_options.top_k} if payload.extra_options else {}),
     }
 
-    config = {"configurable": {"thread_id": payload.thread_id}}
+    if stream:
+        # if stream is true, return a generator that manages its own connection.
+        # use a separate function so that the generator is only returned in case of streaming, otherwise we can return the final result directly without the overhead of managing a generator and connection.
+        return __stream_agent(payload, tools, initial_state)
 
     with PostgresSaver.from_conn_string(
-        app_config.POSTGRES_CONNECTION_STRING
+        config.POSTGRES_CONNECTION_STRING
     ) as checkpointer:
-        workflow = init_workflow(app_config, payload, tools)
+        workflow = init_workflow(payload, tools)
         graph = workflow.compile(checkpointer=checkpointer)
-        return graph.invoke(initial_state, config=config)
+
+        conf = {"configurable": {"thread_id": payload.thread_id}}
+        return graph.invoke(initial_state, config=conf)
 
 
 @traceable(
@@ -49,47 +87,41 @@ def run_agent(
     name="rag_agent",
 )
 def rag_agent(
-    app_config: Config,
+    payload: RAGRequest,
+):
+    result: dict = run_agent(payload)
+    return {
+        "answer": result.get("answer", ""),
+        "used_context": used_context(result),
+        "trace_id": result.get("trace_id", ""),
+    }
+
+
+def rag_agent_stream(
     payload: RAGRequest,
 ):
 
-    result = run_agent(app_config, payload)
-    used_context = []
-    dummy_vector = np.zeros(1536).tolist()
+    gen = run_agent(payload, stream=True)
+    result: Optional[dict] = None
 
-    for item in result.get("references", []):
-        payload = (
-            qdrant_client.get()
-            .query_points(
-                collection_name=RAG_COLLECTIONS["items"],
-                query=dummy_vector,
-                limit=1,
-                using=RAG_EMBEDDING_MODEL,
-                with_payload=True,
-                query_filter=Filter(
-                    must=[
-                        FieldCondition(
-                            key="parent_asin", match=MatchValue(value=item.id)
-                        )
-                    ]
-                ),
-            )
-            .points[0]
-            .payload
+    try:
+        while True:
+            chunk = next(gen)
+            yield chunk  # propagate the chunk to the SSE stream
+    except StopIteration as e:
+        result = e.value  # the final result returned by the generator after completion
+
+    yield string_for_sse(
+        dumps(
+            {
+                "type": "final_result",
+                "data": {
+                    "answer": result.get("answer", ""),
+                    "used_context": [
+                        item.model_dump() for item in used_context(result)
+                    ],
+                    "trace_id": result.get("trace_id", ""),
+                },
+            }
         )
-        image_url = payload.get("image")
-        price = payload.get("price")
-        if image_url:
-            used_context.append(
-                {
-                    "image_url": image_url,
-                    "price": price,
-                    "description": item.description,
-                }
-            )
-
-    return {
-        "answer": result.get("answer", ""),
-        "used_context": used_context,
-        "trace_id": result.get("trace_id", ""),
-    }
+    )
