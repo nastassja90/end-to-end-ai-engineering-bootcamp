@@ -108,19 +108,29 @@ def intent_router_node(state: State):
 
     prompt = template.render()
 
-    messages = state.messages
+    # Only use the latest user message for intent routing.
+    # Using the full conversation history causes errors in multi-turn conversations
+    # because previous assistant messages may contain tool_calls without corresponding
+    # tool response messages, which OpenAI rejects.
+    last_user_message = None
+    for message in reversed(state.messages):
+        converted = convert_to_openai_messages(message)
+        if isinstance(converted, dict) and converted.get("role") == "user":
+            last_user_message = converted
+            break
+        elif hasattr(converted, "get") and converted.get("role") == "user":
+            last_user_message = converted
+            break
 
-    conversation = []
-
-    for message in messages:
-        conversation.append(convert_to_openai_messages(message))
+    if last_user_message is None:
+        last_user_message = convert_to_openai_messages(state.messages[-1])
 
     client = from_openai(OpenAI())
 
     response, raw_response = client.chat.completions.create_with_completion(
         model="gpt-4.1-mini",
         response_model=IntentRouterResponse,
-        messages=[{"role": "system", "content": prompt}, *conversation],
+        messages=[{"role": "system", "content": prompt}, last_user_message],
         temperature=0.5,
     )
 

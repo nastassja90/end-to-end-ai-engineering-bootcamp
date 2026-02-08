@@ -1,6 +1,6 @@
 from typing import Callable, List
 from api.server.models import RAGRequest
-from api.agents.internal.models import State
+from api.agents.internal.models import State, ToolCall
 from api.agents.internal.nodes import agent_node, intent_router_node
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
@@ -27,9 +27,9 @@ def process_graph_event(chunk):
     def _is_node_end(chunk):
         return chunk[0] == "updates"
 
-    def _tool_to_text(tool_call):
+    def _tool_to_text(tool_call: ToolCall):
         if tool_call.name == "get_formatted_context":
-            return f"Looking for items: {tool_call.arguments.get('query', '')}."
+            return f"Looking for items: {tool_call.arguments.query}."
         elif tool_call.name == "get_formatted_reviews_context":
             return f"Fetching user reviews..."
         else:
