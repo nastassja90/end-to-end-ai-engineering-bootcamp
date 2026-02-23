@@ -1,11 +1,11 @@
-from typing import Optional
+from typing import Optional, cast
 from langsmith import traceable, get_current_run_tree
 from langchain_core.messages import convert_to_openai_messages
 from openai import OpenAI
 from instructor import from_openai
 
 from api.core.config import OPENAI
-from api.agents.internal.models import IntentRouterResponse, State
+from api.agents.common.models import IntentRouterResponse, State, StructuredResponse
 from api.utils.tracing import hide_sensitive_inputs
 from api.agents.prompts.prompts import prompt_template_config
 from api.utils.utils import format_ai_message
@@ -63,7 +63,10 @@ def agent_node(state: State, provider: str, model_name: str) -> dict:
             model_name=model_name,
             messages=messages,
             temperature=0.5,
+            response_model=StructuredResponse,
         )
+
+        response = cast(StructuredResponse, response)
 
         logger.info(f"LLM Response: {response}")
 

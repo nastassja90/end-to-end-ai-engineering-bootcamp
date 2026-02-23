@@ -48,6 +48,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+      - ./scripts/sql:/docker-entrypoint-initdb.d # mount the SQL scripts to initialize the database; scripts are executed in alphabetical order on container startup
 
   items_mcp_server:
     build:

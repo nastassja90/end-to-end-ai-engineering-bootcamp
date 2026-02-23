@@ -3,7 +3,7 @@ from typing import Literal, Optional, Union
 from api.core.config import DEFAULT_TOP_K, MAX_TOP_K
 
 
-ExecutionType = Literal["pipeline", "agent"]
+ExecutionType = Literal["pipeline", "agent", "multi-agent"]
 """Enumeration for the type of RAG execution."""
 
 
@@ -20,7 +20,7 @@ class RAGRequestExtraOptions(BaseModel):
 class RAGRequest(BaseModel):
     execution_type: ExecutionType = Field(
         "pipeline",
-        description="The type of RAG execution: 'pipeline' or 'agent'. Default is 'pipeline'.",
+        description="The type of RAG execution: 'pipeline', 'agent' or 'multi-agent'. Default is 'pipeline'.",
     )
     provider: str = Field(..., description="The LLM provider to use")
     model_name: str = Field(..., description="The model name to use")

@@ -1,39 +1,100 @@
-from api.agents.rag.rag import (
-    process_context,
-    retrieve_data,
-    process_reviews_context,
-    retrieve_reviews_data,
-)
+import openai
+from langsmith import traceable, get_current_run_tree
+from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Prefetch,
     FusionQuery,
+    Document,
     Filter,
     FieldCondition,
-    MatchValue,
+    MatchAny,
 )
-from api.core.config import DEFAULT_TOP_K
-from api.server.models import RAGRequestExtraOptions
-from api.utils.tracing import hide_sensitive_inputs
-from langsmith import traceable
-from numpy import zeros
-from api.core.qdrant import qdrant_client
-from api.core.config import RAG_COLLECTIONS, RAG_EMBEDDING_MODEL
-from api.core.pg import postgres_client
 
-import logging
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import numpy as np
+from qdrant_client.models import MatchValue
 
 
 @traceable(
-    process_inputs=hide_sensitive_inputs,
-    name="get_formatted_item_context",
-    run_type="tool",
+    name="embed_query",
+    run_type="embedding",
+    metadata={"ls_provider": "openai", "ls_model_name": "text-embedding-3-small"},
 )
-def get_formatted_item_context(query: str, top_k: int = DEFAULT_TOP_K) -> str:
+def get_embedding(text, model="text-embedding-3-small"):
+    response = openai.embeddings.create(
+        input=text,
+        model=model,
+    )
+
+    current_run = get_current_run_tree()
+
+    if current_run:
+        current_run.metadata["usage_metadata"] = {
+            "input_tokens": response.usage.prompt_tokens,
+            "total_tokens": response.usage.total_tokens,
+        }
+
+    return response.data[0].embedding
+
+
+### Item Description Retrieval Tool
+
+
+@traceable(name="retrieve_data", run_type="retriever")
+def retrieve_items_data(query, k=5):
+
+    query_embedding = get_embedding(query)
+
+    qdrant_client = QdrantClient(url="http://localhost:6333")
+
+    results = qdrant_client.query_points(
+        collection_name="Amazon-items-collection-01-hybrid-search",
+        prefetch=[
+            Prefetch(query=query_embedding, using="text-embedding-3-small", limit=20),
+            Prefetch(
+                query=Document(text=query, model="qdrant/bm25"), using="bm25", limit=20
+            ),
+        ],
+        query=FusionQuery(fusion="rrf"),
+        limit=k,
+    )
+
+    retrieved_context_ids = []
+    retrieved_context = []
+    similarity_scores = []
+    retrieved_context_ratings = []
+
+    for result in results.points:
+        retrieved_context_ids.append(result.payload["parent_asin"])
+        retrieved_context.append(result.payload["description"])
+        retrieved_context_ratings.append(result.payload["average_rating"])
+        similarity_scores.append(result.score)
+
+    return {
+        "retrieved_context_ids": retrieved_context_ids,
+        "retrieved_context": retrieved_context,
+        "retrieved_context_ratings": retrieved_context_ratings,
+        "similarity_scores": similarity_scores,
+    }
+
+
+@traceable(name="format_retrieved_context", run_type="prompt")
+def process_items_context(context):
+
+    formatted_context = ""
+
+    for id, chunk, rating in zip(
+        context["retrieved_context_ids"],
+        context["retrieved_context"],
+        context["retrieved_context_ratings"],
+    ):
+        formatted_context += f"- ID: {id}, rating: {rating}, description: {chunk}\n"
+
+    return formatted_context
+
+
+def get_formatted_items_context(query: str, top_k: int = 5) -> str:
     """Get the top k context, each representing an inventory item for a given query.
 
     Args:
@@ -43,26 +104,76 @@ def get_formatted_item_context(query: str, top_k: int = DEFAULT_TOP_K) -> str:
     Returns:
         A string of the top k context chunks with IDs and average ratings prepending each chunk, each representing an inventory item for a given query.
     """
-    extra_options = RAGRequestExtraOptions(top_k=top_k, enable_reranking=False)
 
-    context = retrieve_data(query, extra_options)
-    formatted_context = process_context(context)
+    context = retrieve_items_data(query, top_k)
+    formatted_context = process_items_context(context)
 
     return formatted_context
 
 
-@traceable(
-    process_inputs=hide_sensitive_inputs,
-    name="get_formatted_reviews_context",
-    run_type="tool",
-)
+### Item Reviews Retrieval Tool
+
+
+@traceable(name="retrieve_reviews_data", run_type="retriever")
+def retrieve_reviews_data(query, item_list, k=5):
+
+    query_embedding = get_embedding(query)
+
+    qdrant_client = QdrantClient(url="http://localhost:6333")
+
+    results = qdrant_client.query_points(
+        collection_name="Amazon-items-collection-01-reviews",
+        prefetch=[
+            Prefetch(
+                query=query_embedding,
+                filter=Filter(
+                    must=[
+                        FieldCondition(key="parent_asin", match=MatchAny(any=item_list))
+                    ]
+                ),
+                limit=20,
+            )
+        ],
+        query=FusionQuery(fusion="rrf"),
+        limit=k,
+    )
+
+    retrieved_context_ids = []
+    retrieved_context = []
+    similarity_scores = []
+
+    for result in results.points:
+        retrieved_context_ids.append(result.payload["parent_asin"])
+        retrieved_context.append(result.payload["text"])
+        similarity_scores.append(result.score)
+
+    return {
+        "retrieved_context_ids": retrieved_context_ids,
+        "retrieved_context": retrieved_context,
+        "similarity_scores": similarity_scores,
+    }
+
+
+@traceable(name="format_retrieved_reviews_context", run_type="prompt")
+def process_reviews_context(context):
+
+    formatted_context = ""
+
+    for id, chunk in zip(
+        context["retrieved_context_ids"], context["retrieved_context"]
+    ):
+        formatted_context += f"- ID: {id}, review: {chunk}\n"
+
+    return formatted_context
+
+
 def get_formatted_reviews_context(query: str, item_list: list, top_k: int = 15) -> str:
     """Get the top k reviews matching a query for a list of prefiltered items.
 
     Args:
         query: The query to get the top k reviews for
         item_list: The list of item IDs to prefilter for before running the query
-        top_k: The number of reviews to retrieve, this should be at least 20 if multiple items are prefiltered
+        top_k: The number of reviews to retrieve, this should be at least 20 if multipple items are prefiltered
 
     Returns:
         A string of the top k context chunks with IDs prepending each chunk, each representing a review for a given inventory item for a given query.
@@ -74,10 +185,7 @@ def get_formatted_reviews_context(query: str, item_list: list, top_k: int = 15) 
     return formatted_context
 
 
-### Shopping Cart Tools
-
-tools_database_name = "tools_database"
-"""Name of the Postgres database to use for the shopping cart tools."""
+### Add to Shopping Cart Tools
 
 
 @traceable(name="add_to_shopping_cart", run_type="tool")
@@ -93,109 +201,114 @@ def add_to_shopping_cart(items: list[dict], user_id: str, cart_id: str) -> str:
         A list of the items added to the shopping cart.
     """
 
-    try:
-        with postgres_client.get(db=tools_database_name) as cursor:
-            for item in items:
-                product_id = item["product_id"]
-                quantity = item["quantity"]
+    conn = psycopg2.connect(
+        host="localhost",
+        port=5432,
+        database="tools_database",
+        user="user",
+        password="pwd",
+    )
+    conn.autocommit = True
 
-                prefetch: Prefetch = Prefetch(
-                    query=zeros(1536).tolist(),
-                    filter=Filter(
-                        must=[
-                            FieldCondition(
-                                key="parent_asin",
-                                match=MatchValue(value=product_id),
-                            )
-                        ]
-                    ),
-                    using=RAG_EMBEDDING_MODEL,
-                    limit=20,
+    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+        for item in items:
+            product_id = item["product_id"]
+            quantity = item["quantity"]
+
+            qdrant_client = QdrantClient(url="http://localhost:6333")
+
+            dummy_vector = np.zeros(1536).tolist()
+            payload = (
+                qdrant_client.query_points(
+                    collection_name="Amazon-items-collection-01-hybrid-search",
+                    prefetch=[
+                        Prefetch(
+                            query=dummy_vector,
+                            filter=Filter(
+                                must=[
+                                    FieldCondition(
+                                        key="parent_asin",
+                                        match=MatchValue(value=product_id),
+                                    )
+                                ]
+                            ),
+                            using="text-embedding-3-small",
+                            limit=20,
+                        )
+                    ],
+                    query=FusionQuery(fusion="rrf"),
+                    limit=1,
                 )
+                .points[0]
+                .payload
+            )
 
-                payload = (
-                    qdrant_client.get()
-                    .query_points(
-                        collection_name=RAG_COLLECTIONS["items"],
-                        prefetch=[prefetch],
-                        query=FusionQuery(fusion="rrf"),
-                        limit=1,
-                    )
-                    .points[0]
-                    .payload
-                )
+            product_image_url = payload.get("image")
+            price = payload.get("price")
+            currency = "USD"
 
-                product_image_url = payload.get("image")
-                price = payload.get("price")
-                currency = "USD"
+            # Check if item already exists
+            check_query = """
+                SELECT id, quantity, price 
+                FROM shopping_cart_items 
+                WHERE user_id = %s AND shopping_cart_id = %s AND product_id = %s
+            """
+            cursor.execute(check_query, (user_id, cart_id, product_id))
+            existing_item = cursor.fetchone()
 
-                # Check if item already exists
-                check_query = """
-                    SELECT id, quantity, price 
-                    FROM shopping_cart_items 
+            if existing_item:
+                # Update existing item
+                new_quantity = existing_item["quantity"] + quantity
+
+                update_query = """
+                    UPDATE shopping_cart_items 
+                    SET 
+                        quantity = %s,
+                        price = %s,
+                        currency = %s,
+                        product_image_url = COALESCE(%s, product_image_url)
                     WHERE user_id = %s AND shopping_cart_id = %s AND product_id = %s
+                    RETURNING id, quantity, price
                 """
-                cursor.execute(check_query, (user_id, cart_id, product_id))
-                existing_item = cursor.fetchone()
 
-                if existing_item:
-                    # Update existing item
-                    new_quantity = existing_item["quantity"] + quantity
+                cursor.execute(
+                    update_query,
+                    (
+                        new_quantity,
+                        price,
+                        currency,
+                        product_image_url,
+                        user_id,
+                        cart_id,
+                        product_id,
+                    ),
+                )
 
-                    update_query = """
-                        UPDATE shopping_cart_items 
-                        SET 
-                            quantity = %s,
-                            price = %s,
-                            currency = %s,
-                            product_image_url = COALESCE(%s, product_image_url)
-                        WHERE user_id = %s AND shopping_cart_id = %s AND product_id = %s
-                        RETURNING id, quantity, price
-                    """
+            else:
+                # Insert new item
+                insert_query = """
+                    INSERT INTO shopping_cart_items (
+                        user_id, shopping_cart_id, product_id,
+                        price, quantity, currency, product_image_url
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, quantity, price
+                """
 
-                    cursor.execute(
-                        update_query,
-                        (
-                            new_quantity,
-                            price,
-                            currency,
-                            product_image_url,
-                            user_id,
-                            cart_id,
-                            product_id,
-                        ),
-                    )
+                cursor.execute(
+                    insert_query,
+                    (
+                        user_id,
+                        cart_id,
+                        product_id,
+                        price,
+                        quantity,
+                        currency,
+                        product_image_url,
+                    ),
+                )
 
-                else:
-                    # Insert new item
-                    insert_query = """
-                        INSERT INTO shopping_cart_items (
-                            user_id, shopping_cart_id, product_id,
-                            price, quantity, currency, product_image_url
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id, quantity, price
-                    """
-
-                    cursor.execute(
-                        insert_query,
-                        (
-                            user_id,
-                            cart_id,
-                            product_id,
-                            price,
-                            quantity,
-                            currency,
-                            product_image_url,
-                        ),
-                    )
-
-        return f"Added {items} to the shopping cart."
-    except Exception as e:
-        postgres_client.close()  # Close the connection on error to reset the state
-        logger.error(
-            "Error occurred while adding items to the shopping cart", exc_info=True
-        )
-        raise e
+    return f"Added {items} to the shopping cart."
 
 
 @traceable(name="get_shopping_cart", run_type="tool")
@@ -210,25 +323,30 @@ def get_shopping_cart(user_id: str, cart_id: str) -> list[dict]:
     Returns:
         List of dictionaries containing cart items
     """
-    try:
-        with postgres_client.get(db=tools_database_name) as cursor:
 
-            query = """
-                    SELECT 
-                        product_id, price, quantity,
-                        currency, product_image_url,
-                        (price * quantity) as total_price
-                    FROM shopping_cart_items 
-                    WHERE user_id = %s AND shopping_cart_id = %s
-                    ORDER BY added_at DESC
-                """
-            cursor.execute(query, (user_id, cart_id))
+    conn = psycopg2.connect(
+        host="localhost",
+        port=5433,
+        database="tools_database",
+        user="langgraph_user",
+        password="langgraph_password",
+    )
+    conn.autocommit = True
 
-            return [dict(row) for row in cursor.fetchall()]
-    except Exception as e:
-        postgres_client.close()  # Close the connection on error to reset the state
-        logger.error("Error occurred while retrieving the shopping cart", exc_info=True)
-        raise e
+    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+        query = """
+                SELECT 
+                    product_id, price, quantity,
+                    currency, product_image_url,
+                    (price * quantity) as total_price
+                FROM shopping_cart_items 
+                WHERE user_id = %s AND shopping_cart_id = %s
+                ORDER BY added_at DESC
+            """
+        cursor.execute(query, (user_id, cart_id))
+
+        return [dict(row) for row in cursor.fetchall()]
 
 
 @traceable(name="remove_from_cart", run_type="tool")
@@ -244,28 +362,30 @@ def remove_from_cart(product_id: str, user_id: str, cart_id: str) -> str:
     Returns:
         True if item was removed, False if item wasn't found
     """
-    try:
-        with postgres_client.get(db=tools_database_name) as cursor:
 
-            query = """
-                    DELETE FROM shopping_cart_items
-                    WHERE user_id = %s AND shopping_cart_id = %s AND product_id = %s
-                """
-            cursor.execute(query, (user_id, cart_id, product_id))
+    conn = psycopg2.connect(
+        host="localhost",
+        port=5433,
+        database="tools_database",
+        user="langgraph_user",
+        password="langgraph_password",
+    )
+    conn.autocommit = True
 
-            return cursor.rowcount > 0
-    except Exception as e:
-        postgres_client.close()  # Close the connection on error to reset the state
-        logger.error(
-            "Error occurred while removing item from the shopping cart", exc_info=True
-        )
-        raise e
+    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+        query = """
+                DELETE FROM shopping_cart_items
+                WHERE user_id = %s AND shopping_cart_id = %s AND product_id = %s
+            """
+        cursor.execute(query, (user_id, cart_id, product_id))
+
+        return cursor.rowcount > 0
 
 
 ### Warehouse Manager Agent Tools
 
 
-@traceable(name="check_warehouse_availability", run_type="tool")
 def check_warehouse_availability(items: list[dict]) -> dict:
     """Check availability of items across warehouses, including partial fulfillment options.
 
@@ -281,8 +401,16 @@ def check_warehouse_availability(items: list[dict]) -> dict:
         - details: detailed breakdown per warehouse with availability for each item
     """
 
+    conn = psycopg2.connect(
+        host="localhost",
+        port=5433,
+        database="tools_database",
+        user="langgraph_user",
+        password="langgraph_password",
+    )
+
     try:
-        with postgres_client.get(db=tools_database_name) as cursor:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             result = {
                 "can_fulfill_completely": False,
                 "warehouses_full_fulfillment": [],
@@ -406,10 +534,9 @@ def check_warehouse_availability(items: list[dict]) -> dict:
             return result
 
     finally:
-        postgres_client.close()
+        conn.close()
 
 
-@traceable(name="reserve_warehouse_items", run_type="tool")
 def reserve_warehouse_items(reservations: list[dict]) -> dict:
     """Reserve items from multiple warehouses in a single transaction.
 
@@ -426,8 +553,17 @@ def reserve_warehouse_items(reservations: list[dict]) -> dict:
         - failed_items: list of items that could not be reserved
     """
 
+    conn = psycopg2.connect(
+        host="localhost",
+        port=54332,
+        database="tools_database",
+        user="user",
+        password="pwd",
+    )
+    conn.autocommit = False  # Use transaction
+
     try:
-        with postgres_client.get(db=tools_database_name, autocommit=False) as cursor:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             result = {"success": False, "reserved_items": [], "failed_items": []}
 
             for reservation in reservations:
@@ -483,16 +619,16 @@ def reserve_warehouse_items(reservations: list[dict]) -> dict:
 
             # Only commit if all items were successfully reserved
             if len(result["failed_items"]) == 0:
-                postgres_client.commit()
+                conn.commit()
                 result["success"] = True
             else:
-                postgres_client.rollback()
+                conn.rollback()
                 result["success"] = False
 
             return result
 
     except Exception as e:
-        postgres_client.rollback()
+        conn.rollback()
         raise e
     finally:
-        postgres_client.close()
+        conn.close()

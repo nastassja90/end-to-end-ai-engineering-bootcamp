@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, cast
 from numpy import zeros
 from openai import embeddings
 from cohere import V2RerankResponse as CohereRerankResponse
@@ -14,7 +14,7 @@ from qdrant_client.models import (
 )
 
 from api.core.cohere import cohere_client
-from api.agents.internal.models import RAGRetrievedContext
+from api.agents.common.models import RAGRetrievedContext
 from api.core.qdrant import qdrant_client
 from api.server.models import RAGRequest, RAGUsedContextItem, RAGRequestExtraOptions
 from api.utils.tracing import hide_sensitive_inputs
@@ -310,7 +310,10 @@ def generate_answer(
         provider,
         model_name,
         messages=[{"role": "system", "content": prompt}],
+        response_model=StructuredResponse,
     )
+
+    output = cast(StructuredResponse, output)
 
     if current_run:
         current_run.metadata["usage_metadata"] = extract_usage_metadata(

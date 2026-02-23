@@ -164,7 +164,7 @@ def tool_router(state):
 
 ---
 
-## The Tool: get_formatted_context
+## The Tool: get_formatted_item_context
 
 ### What It Is
 
@@ -187,7 +187,7 @@ By wrapping it in a tool, the agent can:
 ### Implementation
 
 ```python
-def get_formatted_context(query: str, top_k: int = 5) -> str:
+def get_formatted_item_context(query: str, top_k: int = 5) -> str:
     """
     Retrieves the top-k relevant products from the vector database.
 
@@ -242,11 +242,11 @@ class State(BaseModel):
 
 2. agent_node (iteration 1)
    ├─ LLM sees: tool available, no results yet
-   ├─ Decides: call get_formatted_context(query="earphones")
-   └─ Output: tool_calls=[ToolCall(name="get_formatted_context", arguments={query: "earphones"})]
+   ├─ Decides: call get_formatted_item_context(query="earphones")
+   └─ Output: tool_calls=[ToolCall(name="get_formatted_item_context", arguments={query: "earphones"})]
 
 3. tool_node
-   ├─ Executes: get_formatted_context("earphones")
+   ├─ Executes: get_formatted_item_context("earphones")
    ├─ Qdrant hybrid search + format
    └─ Output: 5 formatted products added to messages
 
@@ -274,7 +274,7 @@ Prompts are in separate YAML files (`prompts/`):
 ### Safety Limits
 
 - **Max iterations**: 2 (prevents infinite loops if agent keeps calling tools)
-- **Single tool**: Currently only `get_formatted_context`, but extensible
+- **Single tool**: Currently only `get_formatted_item_context`, but extensible
 
 ### Multi-Provider
 

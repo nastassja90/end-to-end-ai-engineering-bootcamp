@@ -9,7 +9,7 @@ LLMProvider: TypeAlias = Literal[f"{OPENAI}", f"{GROQ}", f"{GOOGLE}"]
 """Type alias for supported LLM providers."""
 
 MODELS: dict[LLMProvider, list[str]] = {
-    OPENAI: ["gpt-4.1-mini"],
+    OPENAI: ["gpt-4.1-mini", "gpt-4.1"],
     GROQ: ["llama-3.3-70b-versatile"],
     GOOGLE: ["gemini-2.5-flash"],
 }

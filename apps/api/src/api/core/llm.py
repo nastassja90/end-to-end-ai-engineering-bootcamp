@@ -1,12 +1,13 @@
-from typing import TypeAlias, Tuple, List, Dict, Any
+from typing import Type, TypeAlias, Tuple, List, Dict, Any
 from openai import OpenAI
 from openai.types.chat import ChatCompletion as OpenAIChatCompletion
 from groq import Groq
+from pydantic import BaseModel
 from groq.types.chat import ChatCompletion as GroqChatCompletion
 from google.genai import Client as Gemini
 from google.genai.types import GenerateContentResponse
 from api.core.config import GROQ, GOOGLE, config
-from api.agents.internal.models import StructuredResponse
+from api.agents.common.models import StructuredResponse
 import instructor
 from instructor import Mode
 
@@ -119,7 +120,8 @@ def run_llm(
     model_name: str,
     messages,
     temperature: float = 0.0,
-) -> Tuple[StructuredResponse, LLMResponse]:
+    response_model: Type[BaseModel] = StructuredResponse,
+) -> Tuple[BaseModel, LLMResponse]:
     """Run an LLM request using the configured provider and return a structured response.
 
     Selects the appropriate client for Google Gemini, Groq, or OpenAI, applies
@@ -131,9 +133,10 @@ def run_llm(
         model_name: Model name to use for the request.
         messages: Chat messages payload for the model.
         temperature: Sampling temperature for the request.
+        response_model: Pydantic model class to parse the LLM response into a structured format.
 
     Returns:
-        A tuple of (StructuredResponse, LLMResponse) from the completion call.
+        A tuple of (response_model instance, LLMResponse) from the completion call.
 
     Raises:
         Exception: Propagates any errors raised during the Gemini call after logging.
@@ -154,7 +157,7 @@ def run_llm(
             return client.chat.completions.create_with_completion(
                 model=model_name,
                 messages=gemini_messages,
-                response_model=StructuredResponse,
+                response_model=response_model,
             )
         except Exception as e:
             print(f"ERROR in Gemini LLM call: {type(e).__name__}: {e}")
@@ -173,5 +176,5 @@ def run_llm(
         model=model_name,
         messages=messages,
         temperature=temperature,
-        response_model=StructuredResponse,
+        response_model=response_model,
     )

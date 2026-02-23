@@ -21,17 +21,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-rag_router = APIRouter()
+agents_router = APIRouter()
 
 
-@rag_router.post("/")
+@agents_router.post("/")
 def rag(request: Request, payload: RAGRequest) -> RAGResponse:
     logger.info(
         f"RAG request received. Request ID: {request.state.request_id}, Question: {payload.query}"
     )
 
     executor = rag_pipeline
-    if payload.execution_type == "agent":
+    if payload.execution_type == "agent" or payload.execution_type == "multi-agent":
         executor = rag_agent
 
     result = executor(
@@ -46,7 +46,7 @@ def rag(request: Request, payload: RAGRequest) -> RAGResponse:
     )
 
 
-@rag_router.post("/stream")
+@agents_router.post("/stream")
 def rag(request: Request, payload: RAGRequest) -> StreamingResponse:
     logger.info(
         f"RAG request received. Request ID: {request.state.request_id}, Question: {payload.query}"
@@ -88,5 +88,5 @@ def send_feedback(request: Request, payload: FeedbackRequest) -> FeedbackRespons
 
 api_router = APIRouter()
 api_router.include_router(config_router, prefix="/config", tags=["config"])
-api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
+api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
 api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"])

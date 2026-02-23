@@ -1,7 +1,7 @@
 from typing import Callable, List
 from api.server.models import RAGRequest
-from api.agents.internal.models import State, ToolCall
-from api.agents.internal.nodes import agent_node, intent_router_node
+from api.agents.common.models import State, ToolCall
+from api.agents.basic.nodes import agent_node, intent_router_node
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 from functools import partial
@@ -28,7 +28,7 @@ def process_graph_event(chunk):
         return chunk[0] == "updates"
 
     def _tool_to_text(tool_call: ToolCall):
-        if tool_call.name == "get_formatted_context":
+        if tool_call.name == "get_formatted_item_context":
             return f"Looking for items: {tool_call.arguments.query}."
         elif tool_call.name == "get_formatted_reviews_context":
             return f"Fetching user reviews..."
@@ -82,11 +82,11 @@ def intent_router_conditional_edges(state: State):
 #### Workflow
 
 
-def init_workflow(payload: RAGRequest, tools: List[Callable]) -> StateGraph:
+def init_workflow(payload: RAGRequest, tools: List[List[Callable]]) -> StateGraph:
 
     workflow = StateGraph(State)
 
-    tool_node = ToolNode(tools)
+    tool_node = ToolNode(tools[0])
 
     workflow.add_node(
         "agent_node",

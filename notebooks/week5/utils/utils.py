@@ -1,37 +1,8 @@
 import ast
 import inspect
 from typing import Dict, Any
-from langchain_core.messages import AIMessage
-from urllib.parse import urlparse
-
-
-def parse_pg_connection_string(connection_string: str) -> dict:
-    """
-    Parses a PostgreSQL connection string into its components.
-
-    Args:
-        connection_string (str): The PostgreSQL connection string to parse.
-
-    Returns:
-        dict: A dictionary containing the following keys:
-            - "user": The username specified in the connection string.
-            - "password": The password specified in the connection string.
-            - "host": The hostname of the PostgreSQL server.
-            - "port": The port number of the PostgreSQL server.
-            - "db": The database name.
-
-    Example:
-        >>> parse_pg_connection_string("postgresql://user:pass@localhost:5432/mydb")
-        {'user': 'user', 'password': 'pass', 'host': 'localhost', 'port': 5432, 'db': 'mydb'}
-    """
-    parsed = urlparse(connection_string)
-    return {
-        "user": parsed.username,
-        "password": parsed.password,
-        "host": parsed.hostname,
-        "port": parsed.port,
-        "db": parsed.path.lstrip("/"),
-    }
+from langchain_core.messages import AIMessage, ToolMessage
+import json
 
 
 #### FORMAT AI MESSAGE ####
@@ -42,11 +13,9 @@ def format_ai_message(response):
     if response.tool_calls:
         tool_calls = []
         for i, tc in enumerate(response.tool_calls):
-            # Convert ToolCallArguments to dict if it's a Pydantic model
-            args = tc.arguments
-            if hasattr(args, "model_dump"):
-                args = args.model_dump()
-            tool_calls.append({"id": f"call_{i}", "name": tc.name, "args": args})
+            tool_calls.append(
+                {"id": f"call_{i}", "name": tc.name, "args": tc.arguments}
+            )
 
         ai_message = AIMessage(content=response.answer, tool_calls=tool_calls)
     else:
@@ -119,12 +88,7 @@ def parse_function_definition(function_def: str) -> Dict[str, Any]:
         # Check for default value
         default_idx = i - (num_args - num_defaults)
         if default_idx >= 0:
-            default_node = defaults[default_idx]
-            try:
-                param_info["default"] = ast.literal_eval(ast.unparse(default_node))
-            except (ValueError, SyntaxError):
-                # If the default is a variable reference (like DEFAULT_TOP_K), use its string representation
-                param_info["default"] = ast.unparse(default_node)
+            param_info["default"] = ast.literal_eval(ast.unparse(defaults[default_idx]))
         else:
             result["required"].append(arg.arg)
 
