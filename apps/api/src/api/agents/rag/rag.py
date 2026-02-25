@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import Any, Dict, Optional, cast
 from numpy import zeros
 from openai import embeddings
 from cohere import V2RerankResponse as CohereRerankResponse
@@ -280,26 +280,13 @@ def process_context(context: RAGRetrievedContext) -> str:
 
 @traceable(
     process_inputs=hide_sensitive_inputs,
-    name="build_prompt",
-    run_type="prompt",
-)
-def build_prompt(preprocessed_context: str, question: str) -> str:
-    template = prompt_template_config(retrieval_generation_prompt)
-    prompt = template.render(
-        preprocessed_context=preprocessed_context, question=question
-    )
-    return prompt
-
-
-@traceable(
-    process_inputs=hide_sensitive_inputs,
     name="generate_answer",
     run_type="llm",
 )
 def generate_answer(
     provider: str,
     model_name: str,
-    prompt: str,
+    prompt_template_parameters: Dict[str, Any] = {},
 ) -> StructuredResponse:
     current_run = get_current_run_tree()
     if current_run:
@@ -307,9 +294,11 @@ def generate_answer(
         current_run.metadata["ls_model_name"] = model_name
 
     output, original_response = run_llm(
-        provider,
-        model_name,
-        messages=[{"role": "system", "content": prompt}],
+        provider=provider,
+        model_name=model_name,
+        messages=[],
+        prompts=prompt_template_config(retrieval_generation_prompt),
+        prompt_template_parameters=prompt_template_parameters,
         response_model=StructuredResponse,
     )
 
@@ -342,10 +331,14 @@ def rag_pipeline(
         payload.query,
         extra_options,
     )
-    preprocessed_context = process_context(retrieved_context)
-    prompt = build_prompt(preprocessed_context, payload.query)
+
     output: StructuredResponse = generate_answer(
-        payload.provider, payload.model_name, prompt
+        provider=payload.provider,
+        model_name=payload.model_name,
+        prompt_template_parameters={
+            "preprocessed_context": process_context(retrieved_context),
+            "question": payload.query,
+        },
     )
 
     result = {

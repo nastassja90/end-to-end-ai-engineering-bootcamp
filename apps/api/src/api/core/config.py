@@ -9,9 +9,11 @@ LLMProvider: TypeAlias = Literal[f"{OPENAI}", f"{GROQ}", f"{GOOGLE}"]
 """Type alias for supported LLM providers."""
 
 MODELS: dict[LLMProvider, list[str]] = {
-    OPENAI: ["gpt-4.1-mini", "gpt-4.1"],
-    GROQ: ["llama-3.3-70b-versatile"],
-    GOOGLE: ["gemini-2.5-flash"],
+    OPENAI: ["gpt-4.1-mini"],
+    GROQ: ["groq/llama-3.3-70b-versatile"],
+    # TODO: skip for now GOOGLE models because they are unstable with the integration of
+    # Lite LLM Router and usage metadata extraction when using the gemini models supported by Lite LLM (gemini/gemini-2.0-flash)
+    # GOOGLE: ["gemini-2.5-flash"],
 }
 """Available AI providers and their respective models."""
 
@@ -34,6 +36,9 @@ RAG_RERANKING_MODEL: str = "rerank-v4.0-fast"
 
 class Config(BaseSettings):
     """Configuration settings for the API application."""
+
+    # Logging configuration
+    LOG_LEVEL: str = "INFO"
 
     # API Keys for AI providers
     OPENAI_API_KEY: str

@@ -27,13 +27,7 @@ from api.agents.advanced.graph import (
 from api.utils.utils import get_tool_descriptions
 from api.utils.tracing import hide_sensitive_inputs
 from api.utils.streaming import string_for_sse
-
-import logging
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+from api.utils.logs import logger
 
 rag_tools = [get_formatted_item_context, get_formatted_reviews_context]
 """List of tools to be used by the RAG agent."""

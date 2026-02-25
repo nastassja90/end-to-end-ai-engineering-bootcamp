@@ -8,18 +8,11 @@ from api.server.models import (
     FeedbackRequest,
     FeedbackResponse,
 )
-from api.core.config import config, MODELS, OPENAI, GROQ, GOOGLE
+from api.core.config import MODELS
 from api.agents.rag.rag import rag_pipeline
 from api.agents.agents import rag_agent, rag_agent_stream
 from api.server.processors.feedback import submit_feedback
-
-import logging
-
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+from api.utils.logs import logger
 
 agents_router = APIRouter()
 
@@ -66,7 +59,7 @@ def get_config() -> ConfigResponse:
     """Return the application configuration including available models and providers."""
     return ConfigResponse(
         models=MODELS,
-        providers=[OPENAI, GROQ, GOOGLE],
+        providers=MODELS.keys(),
     )
 
 

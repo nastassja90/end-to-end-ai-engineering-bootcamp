@@ -1,15 +1,8 @@
-import logging
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.server.middleware import RequestIDMiddleware
 from api.server.endpoints import api_router
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
+from api.utils.logs import logger
 
 app = FastAPI()
 

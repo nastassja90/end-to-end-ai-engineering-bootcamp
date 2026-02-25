@@ -1,4 +1,5 @@
 from typing import Optional, cast
+from jinja2 import Template
 from langsmith import traceable, get_current_run_tree
 from langchain_core.messages import convert_to_openai_messages
 from openai import OpenAI
@@ -14,13 +15,8 @@ from api.core.llm import (
     extract_usage_metadata,
 )
 
-import logging
+from api.utils.logs import logger
 
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 qa_agent_prompt = "qa_agent"
 """Prompt ID containing the QA agent prompt template."""
@@ -44,24 +40,19 @@ def agent_node(state: State, provider: str, model_name: str) -> dict:
             current_run.metadata["ls_provider"] = provider
             current_run.metadata["ls_model_name"] = model_name
 
-        template = prompt_template_config(qa_agent_prompt)
-        prompt = template.render(
-            available_tools=state.available_tools, top_k=state.top_k
-        )
-
-        acc = []
-        for message in state.messages:
-            acc.append(convert_to_openai_messages(message))
-        messages = [{"role": "system", "content": prompt}, *acc]
-
-        logger.info(f"Agent Node - Messages: {messages}")
+        logger.info(f"Agent Node - State Messages: {state.messages}")
 
         logger.info(f"Invoking LLM with model: {model_name} from provider: {provider}")
 
         response, original_response = run_llm(
             provider=provider,
             model_name=model_name,
-            messages=messages,
+            messages=state.messages,
+            prompts=prompt_template_config(qa_agent_prompt),
+            prompt_template_parameters={
+                "available_tools": state.available_tools,
+                "top_k": state.top_k,
+            },
             temperature=0.5,
             response_model=StructuredResponse,
         )
@@ -107,8 +98,8 @@ def agent_node(state: State, provider: str, model_name: str) -> dict:
 def intent_router_node(state: State):
     current_run = get_current_run_tree()
 
-    template = prompt_template_config(intent_router_agent_prompt)
-
+    prompts = prompt_template_config(intent_router_agent_prompt)
+    template: Template = Template(prompts["gpt-4.1-mini"])
     prompt = template.render()
 
     # Only use the latest user message for intent routing.

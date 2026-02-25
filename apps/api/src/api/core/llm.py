@@ -1,21 +1,43 @@
 from typing import Type, TypeAlias, Tuple, List, Dict, Any
-from openai import OpenAI
+from jinja2 import Template
 from openai.types.chat import ChatCompletion as OpenAIChatCompletion
-from groq import Groq
 from pydantic import BaseModel
 from groq.types.chat import ChatCompletion as GroqChatCompletion
-from google.genai import Client as Gemini
 from google.genai.types import GenerateContentResponse
-from api.core.config import GROQ, GOOGLE, config
+from api.core.config import GOOGLE, MODELS, config
+from google.genai import Client as Gemini
 from api.agents.common.models import StructuredResponse
-import instructor
-from instructor import Mode
+from instructor import Instructor, Mode, from_genai, from_litellm
+from litellm import completion
+from api.utils.logs import logger
+from langchain_core.messages import convert_to_openai_messages
+from api.agents.prompts.prompts import prompt_template_config
 
 
 # Define a type alias for LLM responses
 LLMResponse: TypeAlias = (
     OpenAIChatCompletion | GroqChatCompletion | GenerateContentResponse
 )
+
+
+def __is_google_model(model_name: str) -> bool:
+    """Check if the given model name belongs to the Google provider."""
+    if GOOGLE not in MODELS:
+        return False
+    return model_name in MODELS[GOOGLE]
+
+
+def __models(provider: str, model_name: str) -> List[str]:
+    models: List[str] = [model_name]
+    for item in MODELS.items():
+        p, mm = item
+        if p == provider:
+            for m in mm:
+                if m != model_name:
+                    models.append(m)
+        else:
+            models.extend(mm)
+    return models
 
 
 def convert_messages_for_gemini(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -95,30 +117,31 @@ def convert_messages_for_gemini(messages: List[Dict[str, Any]]) -> List[Dict[str
 
 def extract_usage_metadata(response: LLMResponse, provider: str) -> dict:
     """Extract usage metadata from different LLM provider responses."""
-    if provider == GOOGLE:
-        return {
-            "input_tokens": response.usage_metadata.prompt_token_count,
-            "output_tokens": response.usage_metadata.candidates_token_count,
-            "total_tokens": response.usage_metadata.total_token_count,
-        }
-    elif provider == GROQ:
-        return {
-            "input_tokens": response.usage.prompt_tokens,
-            "output_tokens": response.usage.completion_tokens,
-            "total_tokens": response.usage.total_tokens,
-        }
-    else:  # Default to OpenAI
-        return {
-            "input_tokens": response.usage.prompt_tokens,
-            "output_tokens": response.usage.completion_tokens,
-            "total_tokens": response.usage.total_tokens,
-        }
+    try:
+        logger.info(f"LLM Response: {response}")
+        if provider == GOOGLE:
+            return {
+                "input_tokens": response.usage_metadata.prompt_token_count,
+                "output_tokens": response.usage_metadata.candidates_token_count,
+                "total_tokens": response.usage_metadata.total_token_count,
+            }
+        else:  # Supports both GROQ and OPENAI
+            return {
+                "input_tokens": response.usage.prompt_tokens,
+                "output_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+            }
+    except Exception as e:
+        logger.exception(f"Failed to extract usage metadata: {e}")
+        return {}
 
 
 def run_llm(
     provider: str,
     model_name: str,
     messages,
+    prompts: Dict[str, str],
+    prompt_template_parameters: Dict[str, Any] = {},
     temperature: float = 0.0,
     response_model: Type[BaseModel] = StructuredResponse,
 ) -> Tuple[BaseModel, LLMResponse]:
@@ -132,6 +155,8 @@ def run_llm(
         provider: Provider identifier (e.g., GOOGLE, GROQ, or default OpenAI).
         model_name: Model name to use for the request.
         messages: Chat messages payload for the model.
+        prompts: Dictionary of prompt templates for different agents.
+        prompt_template_parameters: Dictionary of parameters to render the prompt templates.
         temperature: Sampling temperature for the request.
         response_model: Pydantic model class to parse the LLM response into a structured format.
 
@@ -142,39 +167,40 @@ def run_llm(
         Exception: Propagates any errors raised during the Gemini call after logging.
     """
 
-    client: instructor.Instructor | None = None
+    acc = []
+    for message in messages:
+        acc.append(convert_to_openai_messages(message))
 
-    if provider == GOOGLE:
-        # Use GENAI_STRUCTURED_OUTPUTS mode for Gemini to avoid MALFORMED_FUNCTION_CALL errors
-        # Gemini gets confused when StructuredResponse contains tool_calls field with GENAI_TOOLS mode
-        client = instructor.from_genai(
-            Gemini(api_key=config.GOOGLE_API_KEY),
-            mode=Mode.GENAI_STRUCTURED_OUTPUTS,
-        )
-        # Gemini requires specific message format conversion (roles, system handling, etc.)
+    client: Instructor = from_litellm(completion)
+    for model in __models(provider, model_name):
+
         try:
-            gemini_messages = convert_messages_for_gemini(messages)
+            ai_messages: List[dict] = []
+            template = Template(prompts.get(model))
+            prompt = template.render(**prompt_template_parameters)
+            ai_messages = [{"role": "system", "content": prompt}, *acc]
+
+            if __is_google_model(model):
+                logger.info(
+                    f"Using Google Gemini model '{model}' with GENAI_STRUCTURED_OUTPUTS mode"
+                )
+                # Use GENAI_STRUCTURED_OUTPUTS mode for Gemini to avoid MALFORMED_FUNCTION_CALL errors
+                # Gemini gets confused when StructuredResponse contains tool_calls field with GENAI_TOOLS mode
+                return from_genai(
+                    Gemini(api_key=config.GOOGLE_API_KEY),
+                    mode=Mode.GENAI_STRUCTURED_OUTPUTS,
+                ).chat.completions.create_with_completion(
+                    model=model_name,
+                    messages=convert_messages_for_gemini(ai_messages),
+                    response_model=response_model,
+                )
             return client.chat.completions.create_with_completion(
-                model=model_name,
-                messages=gemini_messages,
+                model=model,
                 response_model=response_model,
+                messages=ai_messages,
+                temperature=temperature,
             )
         except Exception as e:
-            print(f"ERROR in Gemini LLM call: {type(e).__name__}: {e}")
-            raise e
-    elif provider == GROQ:
-        # Use JSON mode for Groq to avoid tool_use_failed errors
-        # Groq sometimes generates <function=...> format instead of valid JSON in TOOLS mode
-        client = instructor.from_groq(
-            Groq(api_key=config.GROQ_API_KEY),
-            mode=Mode.JSON,
-        )
-    else:  # default to OpenAI
-        client = instructor.from_openai(OpenAI(api_key=config.OPENAI_API_KEY))
-
-    return client.chat.completions.create_with_completion(
-        model=model_name,
-        messages=messages,
-        temperature=temperature,
-        response_model=response_model,
-    )
+            logger.exception(f"Error with model {model}: {e}")
+            continue
+    raise Exception("All models failed")

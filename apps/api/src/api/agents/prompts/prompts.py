@@ -1,3 +1,5 @@
+from typing import Dict
+
 import yaml
 from jinja2 import Template
 from langsmith import Client
@@ -9,7 +11,7 @@ The LangSmith client used to interact with the prompt registry.
 """
 
 
-def prompt_template_config(prompt_key: str) -> Template:
+def prompt_template_config(prompt_key: str) -> Dict[str, str]:
     """
     Fetches a prompt template from a YAML configuration file, starting from a prompt key.
     It assumes that the YAML file is named `{prompt_key}.yaml`.
@@ -20,11 +22,7 @@ def prompt_template_config(prompt_key: str) -> Template:
     with open(filepath, "r") as file:
         config = yaml.safe_load(file)
 
-    template_content = config["prompts"][prompt_key]
-
-    template = Template(template_content)
-
-    return template
+    return config["prompts"]
 
 
 def prompt_template_registry(prompt_name: str) -> Template:

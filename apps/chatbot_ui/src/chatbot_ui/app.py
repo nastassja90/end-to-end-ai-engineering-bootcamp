@@ -18,7 +18,7 @@ def get_session_id():
 session_id = get_session_id()
 
 
-@st.cache_data(ttl=300)
+# @st.cache_data(ttl=300)
 def fetch_app_config():
     """Fetch configuration from the backend API."""
     try:
