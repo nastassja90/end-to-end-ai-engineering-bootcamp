@@ -326,10 +326,10 @@ def get_shopping_cart(user_id: str, cart_id: str) -> list[dict]:
 
     conn = psycopg2.connect(
         host="localhost",
-        port=5433,
+        port=5432,
         database="tools_database",
-        user="langgraph_user",
-        password="langgraph_password",
+        user="user",
+        password="pwd",
     )
     conn.autocommit = True
 
@@ -365,10 +365,10 @@ def remove_from_cart(product_id: str, user_id: str, cart_id: str) -> str:
 
     conn = psycopg2.connect(
         host="localhost",
-        port=5433,
+        port=5432,
         database="tools_database",
-        user="langgraph_user",
-        password="langgraph_password",
+        user="user",
+        password="pwd",
     )
     conn.autocommit = True
 
@@ -403,10 +403,10 @@ def check_warehouse_availability(items: list[dict]) -> dict:
 
     conn = psycopg2.connect(
         host="localhost",
-        port=5433,
+        port=5432,
         database="tools_database",
-        user="langgraph_user",
-        password="langgraph_password",
+        user="user",
+        password="pwd",
     )
 
     try:
@@ -555,7 +555,7 @@ def reserve_warehouse_items(reservations: list[dict]) -> dict:
 
     conn = psycopg2.connect(
         host="localhost",
-        port=54332,
+        port=5432,
         database="tools_database",
         user="user",
         password="pwd",

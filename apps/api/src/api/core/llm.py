@@ -124,12 +124,14 @@ def extract_usage_metadata(response: LLMResponse, provider: str) -> dict:
                 "input_tokens": response.usage_metadata.prompt_token_count,
                 "output_tokens": response.usage_metadata.candidates_token_count,
                 "total_tokens": response.usage_metadata.total_token_count,
+                "cached_tokens": response.usage_metadata.cache_tokens_details,
             }
         else:  # Supports both GROQ and OPENAI
             return {
                 "input_tokens": response.usage.prompt_tokens,
                 "output_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens,
+                "cached_tokens": response.usage.prompt_tokens_details.cached_tokens,
             }
     except Exception as e:
         logger.exception(f"Failed to extract usage metadata: {e}")

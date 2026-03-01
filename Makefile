@@ -21,3 +21,9 @@ run-evals-retriever: # Run the evals retriever module
 
 run-chatbot-ui-local: # Run the Chatbot UI locally with Streamlit
 	PYTHONPATH=${PWD}/apps/chatbot_ui/src uv run streamlit run apps/chatbot_ui/src/chatbot_ui/app.py
+
+run-adk-warehouse-agent: # Run the ADK Warehouse Manager Agent in development mode with web console UI.
+	PYTHONPATH=${PWD}/apps/adk/warehouse_manager_agent uv run adk web --port 8010 ${PWD}/apps/adk/
+
+run-a2a-warehouse-agent: # Run the A2A Warehouse Manager Agent as a remote agent with the A2A server.
+	PYTHONPATH=${PWD}/apps/a2a/warehouse_manager_agent uv run ${PWD}/apps/a2a/warehouse_manager_agent/app.py

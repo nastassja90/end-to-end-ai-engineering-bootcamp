@@ -218,3 +218,6 @@ qdrant_storage/
 
 # Exclude the Postgres data folder
 postgres_data/
+
+# .adk folder
+.adk/
