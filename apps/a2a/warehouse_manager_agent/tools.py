@@ -1,5 +1,7 @@
-import psycopg2
+from psycopg2 import connect
 from psycopg2.extras import RealDictCursor
+from utils import parse_pg_connection_string
+from config import config
 
 ### Warehouse Manager Agent Tools
 
@@ -19,12 +21,14 @@ def check_warehouse_availability(items: list[dict]) -> dict:
         - details: detailed breakdown per warehouse with availability for each item
     """
 
-    conn = psycopg2.connect(
-        host="localhost",
-        port=5432,
-        database="tools_database",
-        user="user",
-        password="pwd",
+    parsed = parse_pg_connection_string(config.POSTGRES_CONNECTION_STRING)
+
+    conn = connect(
+        host=parsed["host"],
+        port=parsed["port"],
+        database=parsed["db"],
+        user=parsed["user"],
+        password=parsed["password"],
     )
 
     try:
@@ -171,12 +175,14 @@ def reserve_warehouse_items(reservations: list[dict]) -> dict:
         - failed_items: list of items that could not be reserved
     """
 
-    conn = psycopg2.connect(
-        host="localhost",
-        port=5432,
-        database="tools_database",
-        user="user",
-        password="pwd",
+    parsed = parse_pg_connection_string(config.POSTGRES_CONNECTION_STRING)
+
+    conn = connect(
+        host=parsed["host"],
+        port=parsed["port"],
+        database=parsed["db"],
+        user=parsed["user"],
+        password=parsed["password"],
     )
     conn.autocommit = False  # Use transaction
 

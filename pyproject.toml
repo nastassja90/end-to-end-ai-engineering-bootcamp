@@ -23,6 +23,7 @@ members = [
     "apps/chatbot_ui",
     "apps/mcp/items",
     "apps/mcp/reviews",
+    "apps/a2a/warehouse_manager_agent",
 ]
 
 [dependency-groups]

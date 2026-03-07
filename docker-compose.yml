@@ -73,3 +73,17 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
     restart: unless-stopped
+
+  a2a_warehouse_manager_agent:
+    build:
+      context: .
+      dockerfile: apps/a2a/warehouse_manager_agent/Dockerfile
+    ports:
+      - 10001:10001
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_CONNECTION_STRING=postgresql://user:pwd@postgres:5432/tools_database
+    restart: unless-stopped
+    depends_on:
+      - postgres
