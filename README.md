@@ -23,6 +23,8 @@ LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 LANGSMITH_API_KEY=...
 LANGSMITH_PROJECT=your-project-name
 CO_API_KEY=...
+QDRANT_API_KEY=...
+QDRANT_URL=your-qdrant-cluster-address
 ```
 
 ### 2. Install dependencies
@@ -122,6 +124,10 @@ Application traces for the entire RAG pipeline can be found under the **Tracing*
 In the following notebook:
 
 - **[05-prompt-management.ipynb](./notebooks/week2/05-prompt-management.ipynb)** it is shown an example using Langsmith as a Prompt registry for easier cross-team collaboration. Visit the **Prompts** section on your Langsmith dashboard to manage all prompt templates in the registry.
+
+## Cloud deployment
+
+The project uses [Qdrant Cloud](https://qdrant.tech/documentation/cloud-intro/) to host all collections in the cloud.
 
 ---
 

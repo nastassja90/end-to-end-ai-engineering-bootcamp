@@ -19,6 +19,10 @@ run-evals-retriever: # Run the evals retriever module
 	uv sync --all-packages
 	PYTHONPATH=${PWD}/apps/api:${PWD}/apps/api/src:$$PYTHONPATH:${PWD} uv run --env-file .env python -m evals.retriever
 
+run-evals-coordinator-agent: # Run the evals coordinator agent module
+	uv sync --all-packages
+	PYTHONPATH=${PWD}/apps/api:${PWD}/apps/api/src:$$PYTHONPATH:${PWD} uv run --env-file .env python -m evals.coordinator_agent
+
 run-chatbot-ui-local: # Run the Chatbot UI locally with Streamlit
 	PYTHONPATH=${PWD}/apps/chatbot_ui/src uv run streamlit run apps/chatbot_ui/src/chatbot_ui/app.py
 

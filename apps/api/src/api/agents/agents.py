@@ -1,10 +1,12 @@
 from json import dumps
 from itertools import chain
-from typing import Callable, Generator, List
+from typing import Callable, Generator, List, Literal, Optional, Union
+from langgraph.graph import StateGraph
 from langsmith import traceable
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.types import Command
 
-from api.server.models import RAGRequest
+from api.server.models import HitlRequest, RAGRequest
 from api.core.config import config
 from api.agents.rag.rag import used_context
 from api.agents.tools.tools import (
@@ -37,6 +39,9 @@ shopping_tools = [add_to_shopping_cart, remove_from_cart, get_shopping_cart]
 
 warehouse_manager_agent_tools = [check_warehouse_availability, reserve_warehouse_items]
 """List of tools to be used by the warehouse manager agent in the multi-agent workflow."""
+
+
+workflow: Optional[StateGraph] = None
 
 
 def __initial_state(payload: RAGRequest, tools: List[List[Callable]]) -> dict:
@@ -105,23 +110,24 @@ def __get_shopping_cart_items(user_id: str, cart_id: str) -> List[dict]:
 
 
 def __stream_agent(
-    payload: RAGRequest, tools: List[List[Callable]], initial_state
+    payload: Union[RAGRequest, HitlRequest], tools: List[List[Callable]], initial_state
 ) -> Generator[str, None, dict]:
     """Internal generator that yields intermediate SSE chunks and returns the final result.
     Manages its own PostgreSQL connection to keep it alive during streaming."""
 
+    global workflow
     try:
 
         result = None
         with PostgresSaver.from_conn_string(
             config.POSTGRES_CONNECTION_STRING
         ) as checkpointer:
+            if workflow is None:
+                executor = basic_workflow
+                if payload.execution_type == "multi-agent":
+                    executor = advanced_workflow
 
-            executor = basic_workflow
-            if payload.execution_type == "multi-agent":
-                executor = advanced_workflow
-
-            workflow = executor(payload, tools)
+                workflow = executor(payload, tools)
             graph = workflow.compile(checkpointer=checkpointer)
             # max_concurrency=1: forces the ToolNode's ThreadPoolExecutor to run tools
             # sequentially, preventing the race condition in qdrant-fastembed's internal
@@ -146,7 +152,9 @@ def __stream_agent(
                 processed_chunk = chunk_processor(chunk)
 
                 if processed_chunk:
-                    yield string_for_sse(processed_chunk)
+                    sse: str = string_for_sse(processed_chunk)
+                    logger.info("Emitting SSE: %s", sse)
+                    yield sse
 
                 if chunk[0] == "values":
                     result = chunk[1]
@@ -186,7 +194,11 @@ def __stream_agent(
     process_inputs=hide_sensitive_inputs,
     name="run_agent",
 )
-def run_agent(payload: RAGRequest) -> dict | Generator[str, None, dict]:
+def run_agent(
+    payload: Union[RAGRequest, HitlRequest],
+    mode: Literal["initial", "hitl"] = "initial",
+) -> dict | Generator[str, None, dict]:
+    global workflow
 
     tools: List[List[Callable]] = (
         [rag_tools, shopping_tools, warehouse_manager_agent_tools]
@@ -194,15 +206,19 @@ def run_agent(payload: RAGRequest) -> dict | Generator[str, None, dict]:
         else [rag_tools]
     )
 
-    initial_state = __initial_state(payload, tools)
+    if mode == "hitl" and isinstance(payload, HitlRequest):
+        initial_state = Command(resume={"confirmed": payload.approved})
+    else:
+        initial_state = __initial_state(payload, tools)
 
     with PostgresSaver.from_conn_string(
         config.POSTGRES_CONNECTION_STRING
     ) as checkpointer:
-        executor = basic_workflow
-        if payload.execution_type == "multi-agent":
-            executor = advanced_workflow
-        workflow = executor(payload, tools)
+        if workflow is None:
+            executor = basic_workflow
+            if payload.execution_type == "multi-agent":
+                executor = advanced_workflow
+            workflow = executor(payload, tools)
         graph = workflow.compile(checkpointer=checkpointer)
 
         conf = {"configurable": {"thread_id": payload.thread_id}, "max_concurrency": 1}
@@ -214,9 +230,10 @@ def run_agent(payload: RAGRequest) -> dict | Generator[str, None, dict]:
     name="rag_agent",
 )
 def rag_agent(
-    payload: RAGRequest,
+    payload: Union[RAGRequest, HitlRequest],
+    mode: Literal["initial", "hitl"] = "initial",
 ):
-    result: dict = run_agent(payload)
+    result: dict = run_agent(payload, mode=mode)
     return {
         "answer": result.get("answer", ""),
         "used_context": used_context(result),
@@ -225,7 +242,8 @@ def rag_agent(
 
 
 def rag_agent_stream(
-    payload: RAGRequest,
+    payload: Union[RAGRequest, HitlRequest],
+    mode: Literal["initial", "hitl"] = "initial",
 ):
     tools: List[List[Callable]] = (
         [rag_tools, shopping_tools, warehouse_manager_agent_tools]
@@ -233,7 +251,11 @@ def rag_agent_stream(
         else [rag_tools]
     )
 
-    initial_state = __initial_state(payload, tools)
+    if mode == "hitl" and isinstance(payload, HitlRequest):
+        initial_state = Command(resume={"confirmed": payload.approved})
+    else:
+        initial_state = __initial_state(payload, tools)
+
     # The final_result chunk (including shopping_cart) is emitted by __stream_agent
     # as the last yielded item before it returns. We simply forward all chunks here.
     # We do not rely on StopIteration.value because @traceable on run_agent wraps

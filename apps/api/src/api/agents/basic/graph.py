@@ -1,5 +1,5 @@
-from typing import Callable, List
-from api.server.models import RAGRequest
+from typing import Callable, List, Union
+from api.server.models import HitlRequest, RAGRequest
 from api.agents.common.models import State, ToolCall
 from api.agents.basic.nodes import agent_node, intent_router_node
 from langgraph.graph import StateGraph, START, END
@@ -82,7 +82,9 @@ def intent_router_conditional_edges(state: State):
 #### Workflow
 
 
-def init_workflow(payload: RAGRequest, tools: List[List[Callable]]) -> StateGraph:
+def init_workflow(
+    payload: Union[RAGRequest, HitlRequest], tools: List[List[Callable]]
+) -> StateGraph:
 
     workflow = StateGraph(State)
 

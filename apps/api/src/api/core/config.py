@@ -1,3 +1,5 @@
+from enum import Enum
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal, TypeAlias
 
@@ -9,7 +11,7 @@ LLMProvider: TypeAlias = Literal[f"{OPENAI}", f"{GROQ}", f"{GOOGLE}"]
 """Type alias for supported LLM providers."""
 
 MODELS: dict[LLMProvider, list[str]] = {
-    OPENAI: ["gpt-4.1-mini"],
+    OPENAI: ["gpt-4.1-mini", "gpt-4.1"],
     GROQ: ["groq/llama-3.3-70b-versatile"],
     # TODO: skip for now GOOGLE models because they are unstable with the integration of
     # Lite LLM Router and usage metadata extraction when using the gemini models supported by Lite LLM (gemini/gemini-2.0-flash)
@@ -34,17 +36,25 @@ RAG_RERANKING_MODEL: str = "rerank-v4.0-fast"
 """The reranking model to use in the RAG pipeline"""
 
 
+class Env(str, Enum):
+    DEV = "dev"
+    PROD = "prod"
+
+
 class Config(BaseSettings):
     """Configuration settings for the API application."""
 
     # Logging configuration
     LOG_LEVEL: str = "INFO"
+    ENV: Env = Env.DEV
+    """Application environment, either 'dev' or 'prod'. Determines environment-specific behavior and settings."""
 
     # API Keys for AI providers
     OPENAI_API_KEY: str
     GROQ_API_KEY: str
     GOOGLE_API_KEY: str
     CO_API_KEY: str
+    QDRANT_API_KEY: str
     QDRANT_URL: str = "http://localhost:6333"
     """Qdrant URL for vector database connection"""
     POSTGRES_CONNECTION_STRING: str = "postgresql://user:pwd@localhost:5432/db"

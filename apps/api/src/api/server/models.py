@@ -79,3 +79,13 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     request_id: str = Field(..., description="The request ID")
     status: str = Field(..., description="The status of the feedback submission")
+
+
+class HitlRequest(BaseModel):
+    thread_id: str = Field(..., description="The thread ID")
+    approved: bool = Field(..., description="Whether the HITL response was approved")
+    feedback: str = Field(..., description="The feedback")
+    execution_type: ExecutionType = Field(
+        "pipeline",
+        description="The type of RAG execution: 'pipeline', 'agent' or 'multi-agent'. Default is 'pipeline'.",
+    )
