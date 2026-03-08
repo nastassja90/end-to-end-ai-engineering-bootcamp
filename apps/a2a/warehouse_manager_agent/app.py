@@ -16,14 +16,12 @@ from google.adk.artifacts import InMemoryArtifactService
 from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+from config import config
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-HOST = "localhost"
-PORT = 10001
 
 
 def main():
@@ -46,7 +44,7 @@ def main():
     agent_card = AgentCard(
         name="warehouse_manager_agent",
         description="A agent that can check the availability of items in the warehouses and reserve them.",
-        url=f"http://{HOST}:{PORT}/",
+        url=f"http://{config.HOST}:{config.PORT}/",
         version="1.0.0",
         defaultInputModes=["text"],
         defaultOutputModes=["text"],
@@ -72,7 +70,7 @@ def main():
         agent_card=agent_card, http_handler=request_handler
     )
 
-    uvicorn.run(server.build(), host=HOST, port=PORT)
+    uvicorn.run(server.build(), host=config.HOST, port=config.PORT)
 
 
 if __name__ == "__main__":
