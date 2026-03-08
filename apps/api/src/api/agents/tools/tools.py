@@ -27,17 +27,23 @@ from api.utils.logs import logger
     name="get_formatted_item_context",
     run_type="tool",
 )
-def get_formatted_item_context(query: str, top_k: int = DEFAULT_TOP_K) -> str:
+def get_formatted_item_context(
+    query: str, top_k: int = DEFAULT_TOP_K, enable_reranking: bool = False
+) -> str:
     """Get the top k context, each representing an inventory item for a given query.
 
     Args:
         query: The query to get the top k context for
         top_k: The number of context chunks to retrieve, works best with 5 or more
+        enable_reranking: Whether to enable reranking of retrieved results based on relevance to the query. Default is false.
 
     Returns:
         A string of the top k context chunks with IDs and average ratings prepending each chunk, each representing an inventory item for a given query.
     """
-    extra_options = RAGRequestExtraOptions(top_k=top_k, enable_reranking=False)
+    extra_options = RAGRequestExtraOptions(
+        top_k=top_k,
+        enable_reranking=enable_reranking,
+    )
 
     context = retrieve_data(query, extra_options)
     formatted_context = process_context(context)

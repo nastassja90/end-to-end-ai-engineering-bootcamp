@@ -52,6 +52,7 @@ def agent_node(state: State, provider: str, model_name: str) -> dict:
             prompt_template_parameters={
                 "available_tools": state.available_tools,
                 "top_k": state.top_k,
+                "enable_reranking": state.enable_reranking,
             },
             temperature=0.5,
             response_model=StructuredResponse,

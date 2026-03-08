@@ -16,6 +16,10 @@ class __ToolCallGetFormattedContextArguments(BaseModel):
         default=DEFAULT_TOP_K,
         description="The number of results to retrieve.",
     )
+    enable_reranking: bool = Field(
+        default=False,
+        description="Whether to enable reranking of retrieved results.",
+    )
 
 
 class __ToolCallGetFormattedReviewsContextArguments(BaseModel):
@@ -104,7 +108,7 @@ ToolCallArguments: TypeAlias = (
     __ToolCallGetFormattedReviewsContextArguments  # 3 fields (query, item_list, top_k) - more specific than GetFormattedContext
     | __ToolCallAddToShoppingCartArguments  # 3 fields (items, user_id, cart_id)
     | __ToolCallRemoveFromCartArguments  # 3 fields (product_id, user_id, cart_id)
-    | __ToolCallGetFormattedContextArguments  # 2 fields (query, top_k)
+    | __ToolCallGetFormattedContextArguments  # 3 fields (query, top_k, enable_reranking)
     | __ToolCallGetShoppingCartArguments  # 2 fields (user_id, cart_id) - least specific, goes last
     | __ToolCallCheckWarehouseAvailabilityArguments  # 1 field (items) - least specific, goes last
     | __ToolCallReserveWarehouseItemsArguments  # 1 field (reservations) - least specific, goes last
@@ -229,6 +233,7 @@ class State(BaseModel):
     answer: str = ""
     available_tools: List[Dict[str, Any]] = []
     top_k: int = DEFAULT_TOP_K
+    enable_reranking: bool = False
     tool_calls: List[ToolCall] = []
     final_answer: bool = False
     references: Annotated[List[ReferencedItem], add] = []
@@ -263,4 +268,5 @@ class StateAdvanced(BaseModel):
     user_id: str = ""
     cart_id: str = ""
     top_k: int = DEFAULT_TOP_K
+    enable_reranking: bool = False
     trace_id: str = ""

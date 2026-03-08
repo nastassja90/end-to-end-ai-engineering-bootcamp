@@ -11,7 +11,6 @@ from instructor import Instructor, Mode, from_genai, from_litellm
 from litellm import completion
 from api.utils.logs import logger
 from langchain_core.messages import convert_to_openai_messages
-from api.agents.prompts.prompts import prompt_template_config
 
 
 # Define a type alias for LLM responses

@@ -21,6 +21,7 @@ prompts:
     - arguments: An object with these fields:
       - query (REQUIRED): The search keywords extracted from the user's question
       - top_k (REQUIRED): Number of results to retrieve. You MUST always pass top_k={{ top_k }}
+      - enable_reranking (REQUIRED): Whether to enable reranking of retrieved results. You MUST always pass enable_reranking={{ enable_reranking }}
 
     CRITICAL: The "query" field inside arguments is MANDATORY. Extract relevant keywords from the user's question.
 
@@ -77,6 +78,8 @@ prompts:
     - arguments: An object with these fields:
       - query (REQUIRED): The search keywords extracted from the user's question
       - top_k (REQUIRED): Number of results to retrieve. You MUST always pass top_k={{ top_k }}
+      - enable_reranking (REQUIRED): Whether to enable reranking of retrieved results. You MUST always pass enable_reranking={{ enable_reranking }}
+
 
     CRITICAL: The "query" field inside arguments is MANDATORY. Extract relevant keywords from the user's question.
 
@@ -133,6 +136,7 @@ prompts:
     - arguments: An object with these fields:
       - query (REQUIRED): The search keywords extracted from the user's question
       - top_k (REQUIRED): Number of results to retrieve. You MUST always pass top_k={{ top_k }}
+      - enable_reranking (REQUIRED): Whether to enable reranking of retrieved results. You MUST always pass enable_reranking={{ enable_reranking }}
 
     CRITICAL: The "query" field inside arguments is MANDATORY. Extract relevant keywords from the user's question.
 
