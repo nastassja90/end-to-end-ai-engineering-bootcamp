@@ -7,6 +7,7 @@ from api.server.models import (
     ConfigResponse,
     FeedbackRequest,
     FeedbackResponse,
+    HitlRequest,
 )
 from api.core.config import MODELS
 from api.agents.rag.rag import rag_pipeline
@@ -79,7 +80,20 @@ def send_feedback(request: Request, payload: FeedbackRequest) -> FeedbackRespons
     return FeedbackResponse(request_id=request.state.request_id, status="success")
 
 
+hitl_router = APIRouter()
+
+
+@hitl_router.post("/")
+def hitl(request: Request, payload: HitlRequest) -> StreamingResponse:
+
+    return StreamingResponse(
+        rag_agent_stream(payload=payload, mode="hitl"),
+        media_type="text/event-stream",
+    )
+
+
 api_router = APIRouter()
 api_router.include_router(config_router, prefix="/config", tags=["config"])
 api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
 api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"])
+api_router.include_router(hitl_router, prefix="/hitl", tags=["hitl"])

@@ -2,6 +2,7 @@ from typing import Annotated, Any, Dict, List, Optional, TypeAlias
 from pydantic import BaseModel, Field
 from operator import add
 from api.core.config import DEFAULT_TOP_K
+from langgraph.graph.message import add_messages
 
 
 class __ToolCallGetFormattedContextArguments(BaseModel):
@@ -249,7 +250,7 @@ class CoordinatorAgentProperties(BaseModel):
 
 
 class StateAdvanced(BaseModel):
-    messages: Annotated[List[Any], add] = []
+    messages: Annotated[List[Any], add_messages] = []
     user_intent: str = ""
     product_qa_agent: AgentProperties = Field(default_factory=AgentProperties)
     shopping_cart_agent: AgentProperties = Field(default_factory=AgentProperties)

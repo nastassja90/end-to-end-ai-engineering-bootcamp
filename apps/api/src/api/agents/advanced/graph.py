@@ -1,5 +1,6 @@
 from functools import partial
-from typing import Callable, List
+from json import dumps
+from typing import Callable, List, Union
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -9,9 +10,10 @@ from api.agents.advanced.nodes import (
     product_qa_agent,
     shopping_cart_agent,
     warehouse_manager_agent,
+    hitl_add_to_cart,
 )
 from api.agents.common.models import StateAdvanced as State, ToolCall
-from api.server.models import RAGRequest
+from api.server.models import HitlRequest, RAGRequest
 
 
 def process_graph_event(chunk):
@@ -28,69 +30,51 @@ def process_graph_event(chunk):
         str or bool: A status message for recognized node starts, or False otherwise.
     """
 
+    # identify if the chunk is a LangGraph interrupt event, which is
+    # used for HITL interactions.
+    def _is_interrupt(chunk):
+        return len(chunk[1].get("payload", {}).get("interrupts", [])) > 0
+
     def _is_node_start(chunk):
         return chunk[1].get("type") == "task"
 
     def _is_node_end(chunk):
         return chunk[0] == "updates"
 
-    def _tool_to_text(tool_call: ToolCall):
-        if tool_call.name == "get_formatted_item_context":
-            return f"Looking for items: {tool_call.arguments.query}."
+    def _tool_to_text(tool_call):
+        if tool_call.name == "get_formatted_items_context":
+            return f"Looking for items: {tool_call.arguments.get('query', '')}."
         elif tool_call.name == "get_formatted_reviews_context":
             return f"Fetching user reviews..."
-        elif tool_call.name == "add_to_shopping_cart":
-            return f"Adding {tool_call.arguments.items} to the shopping cart."
-        elif tool_call.name == "get_shopping_cart":
-            return f"Retrieving the shopping cart."
-        elif tool_call.name == "remove_from_cart":
-            return f"Removing {tool_call.arguments.items} from the shopping cart."
-        elif tool_call.name == "check_warehouse_availability":
-            return f"Checking warehouse availability for {tool_call.arguments.items}."
-        elif tool_call.name == "reserve_warehouse_items":
-            return f"Reserving warehouse items: {tool_call.arguments.reservations}."
         else:
             return f"Unknown tool: {tool_call.name}."
 
     if _is_node_start(chunk):
         if chunk[1].get("payload", {}).get("name") == "coordinator_agent":
-            return "Analyzing the question..."
-        if chunk[1].get("payload", {}).get("name") == "product_qa_agent":
             return "Planning..."
+        if chunk[1].get("payload", {}).get("name") == "product_qa_agent":
+            return "Fetching information about inventory..."
         if chunk[1].get("payload", {}).get("name") == "shopping_cart_agent":
-            return "Managing the shopping cart..."
+            return "Shopping cart management..."
         if chunk[1].get("payload", {}).get("name") == "warehouse_manager_agent":
-            return "Managing the warehouse..."
-        if chunk[1].get("payload", {}).get("name", "").endswith("_tool_node"):
-            node_name = chunk[1].get("payload", {}).get("name", "")
-            input_data = chunk[1].get("payload", {}).get("input", {})
-
-            # input_data is a StateAdvanced pydantic object, access the right sub-agent
-            if node_name == "product_qa_agent_tool_node":
-                tool_calls = (
-                    input_data.product_qa_agent.tool_calls
-                    if hasattr(input_data, "product_qa_agent")
-                    else []
-                )
-            elif node_name == "shopping_cart_agent_tool_node":
-                tool_calls = (
-                    input_data.shopping_cart_agent.tool_calls
-                    if hasattr(input_data, "shopping_cart_agent")
-                    else []
-                )
-            elif node_name == "warehouse_manager_agent_tool_node":
-                tool_calls = (
-                    input_data.warehouse_manager_agent.tool_calls
-                    if hasattr(input_data, "warehouse_manager_agent")
-                    else []
-                )
-            else:
-                tool_calls = []
-
-            message = " ".join([_tool_to_text(tool_call) for tool_call in tool_calls])
+            return "Warehouse management..."
+        if chunk[1].get("payload", {}).get("name") == "tool_node":
+            message = " ".join(
+                [
+                    _tool_to_text(tool_call)
+                    for tool_call in chunk[1]
+                    .get("payload", {})
+                    .get("input", {})
+                    .tool_calls
+                ]
+            )
             return message
+    elif _is_interrupt(chunk):
+        value = chunk[1].get("payload", {}).get("interrupts", [])[0].get("value")
+        payload = {"type": "hitl_interrupt", "data": {"data": value}}
+        return dumps(payload)
     else:
-        return False
+        return "Unknown operation..."
 
 
 #### Edges
@@ -116,11 +100,20 @@ def product_qa_agent_tool_edge(state: State) -> str:
 def shopping_cart_agent_tool_edge(state: State) -> str:
     """Decide whether to continue or end"""
 
+    add_to_cart_tool_call = False
+    for tool_call in state.shopping_cart_agent.tool_calls:
+        if tool_call.name == "add_to_shopping_cart":
+            add_to_cart_tool_call = True
+            break
+
     if state.shopping_cart_agent.iteration > 2:
         return "end"
     elif len(state.shopping_cart_agent.tool_calls) > 0:
         # tool_calls takes priority over final_answer: same reasoning as above.
-        return "tools"
+        if add_to_cart_tool_call:
+            return "hitl_add_to_cart"
+        else:
+            return "tools"
     elif state.shopping_cart_agent.final_answer:
         return "end"
     else:
@@ -159,7 +152,9 @@ def coordinator_agent_edge(state: State) -> str:
 
 
 #### Workflow
-def init_workflow(payload: RAGRequest, tools: List[List[Callable]]) -> StateGraph:
+def init_workflow(
+    payload: Union[RAGRequest, HitlRequest], tools: List[List[Callable]]
+) -> StateGraph:
 
     workflow = StateGraph(State)
 
@@ -209,6 +204,7 @@ def init_workflow(payload: RAGRequest, tools: List[List[Callable]]) -> StateGrap
     workflow.add_node(
         "warehouse_manager_agent_tool_node", warehouse_manager_agent_tool_node
     )
+    workflow.add_node("hitl_add_to_cart", hitl_add_to_cart)
 
     workflow.add_edge(START, "coordinator_agent")
 
@@ -232,7 +228,11 @@ def init_workflow(payload: RAGRequest, tools: List[List[Callable]]) -> StateGrap
     workflow.add_conditional_edges(
         "shopping_cart_agent",
         shopping_cart_agent_tool_edge,
-        {"tools": "shopping_cart_agent_tool_node", "end": "coordinator_agent"},
+        {
+            "tools": "shopping_cart_agent_tool_node",
+            "hitl_add_to_cart": "hitl_add_to_cart",
+            "end": "coordinator_agent",
+        },
     )
 
     workflow.add_conditional_edges(

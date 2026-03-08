@@ -1,7 +1,9 @@
-from typing import Optional, cast
+from typing import Literal, Optional, cast
 
+from langgraph.graph import END
 from langsmith import traceable, get_current_run_tree
 from langchain_core.messages import AIMessage
+from langgraph.types import Command, interrupt
 from api.agents.prompts.prompts import prompt_template_config
 from api.agents.common.models import (
     StateAdvanced as State,
@@ -128,6 +130,40 @@ def shopping_cart_agent(state: State, provider: str, model_name: str) -> dict:
         },
         "answer": response.answer,
     }
+
+
+#### HITL Nodes
+
+
+@traceable(name="hitl_add_to_cart")
+def hitl_add_to_cart(
+    state: State,
+) -> Command[Literal["shopping_cart_agent_tool_node", f"{END}"]]:
+
+    for tool_call in state.shopping_cart_agent.tool_calls:
+        if tool_call.name == "add_to_shopping_cart":
+            items_to_add = tool_call.arguments.items
+            break
+
+    human_input: dict = interrupt({"items_to_add": items_to_add})
+
+    if human_input.get("confirmed"):
+        return Command(update={}, goto="shopping_cart_agent_tool_node")
+    else:
+
+        last_msg = state.messages[-1]
+        sanitized = AIMessage(
+            content=last_msg.content,
+            id=last_msg.id,  # same id = replace instead of append
+        )
+
+        return Command(
+            update={
+                "messages": [sanitized],
+                "answer": "You have rejected the addition of items to the cart.",
+            },
+            goto=END,
+        )
 
 
 @traceable(

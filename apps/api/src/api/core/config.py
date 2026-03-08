@@ -9,7 +9,7 @@ LLMProvider: TypeAlias = Literal[f"{OPENAI}", f"{GROQ}", f"{GOOGLE}"]
 """Type alias for supported LLM providers."""
 
 MODELS: dict[LLMProvider, list[str]] = {
-    OPENAI: ["gpt-4.1-mini"],
+    OPENAI: ["gpt-4.1-mini", "gpt-4.1"],
     GROQ: ["groq/llama-3.3-70b-versatile"],
     # TODO: skip for now GOOGLE models because they are unstable with the integration of
     # Lite LLM Router and usage metadata extraction when using the gemini models supported by Lite LLM (gemini/gemini-2.0-flash)
