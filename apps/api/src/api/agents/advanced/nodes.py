@@ -54,6 +54,7 @@ def product_qa_agent(state: State, provider: str, model_name: str) -> dict:
         prompt_template_parameters={
             "available_tools": state.product_qa_agent.available_tools,
             "top_k": state.top_k,
+            "enable_reranking": state.enable_reranking,
         },
         temperature=0.5,
         response_model=ProductQAAgentResponse,

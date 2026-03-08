@@ -26,13 +26,18 @@ prompts:
 
     CRITICAL: All parameters must go inside the "arguments" object, not at the top level of the tool call.
 
+    For get_formatted_item_context you MUST always pass:
+    - top_k={{ top_k }}
+    - enable_reranking={{ enable_reranking }}
+
     Examples:
     - Get formatted item context:
     {
         "name": "get_formatted_item_context",
         "arguments": {
             "query": "Cool kids toys.",
-            "top_k": 5
+            "top_k": {{ top_k }},
+            "enable_reranking": {{ enable_reranking }}
         }
     }
 
@@ -97,13 +102,18 @@ prompts:
 
     CRITICAL: All parameters must go inside the "arguments" object, not at the top level of the tool call.
 
+    For get_formatted_item_context you MUST always pass:
+    - top_k={{ top_k }}
+    - enable_reranking={{ enable_reranking }}
+
     Examples:
     - Get formatted item context:
     {
         "name": "get_formatted_item_context",
         "arguments": {
             "query": "Cool kids toys.",
-            "top_k": 5
+            "top_k": {{ top_k }},
+            "enable_reranking": {{ enable_reranking }}
         }
     }
 
@@ -168,13 +178,18 @@ prompts:
 
     CRITICAL: All parameters must go inside the "arguments" object, not at the top level of the tool call.
 
+    For get_formatted_item_context you MUST always pass:
+    - top_k={{ top_k }}
+    - enable_reranking={{ enable_reranking }}
+
     Examples:
     - Get formatted item context:
     {
         "name": "get_formatted_item_context",
         "arguments": {
             "query": "Cool kids toys.",
-            "top_k": 5
+            "top_k": {{ top_k }},
+            "enable_reranking": {{ enable_reranking }}
         }
     }
 

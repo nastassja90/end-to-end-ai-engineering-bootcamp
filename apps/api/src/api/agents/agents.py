@@ -50,24 +50,34 @@ def __initial_state(payload: RAGRequest, tools: List[List[Callable]]) -> dict:
         "iteration": 0,
         "available_tools": get_tool_descriptions(list(chain(*tools))),
         # Add top_k to the initial state only if it's provided in extra_options
-        **({"top_k": payload.extra_options.top_k} if payload.extra_options else {}),
+        **(
+            {
+                "top_k": payload.extra_options.top_k,
+                "enable_reranking": payload.extra_options.enable_reranking,
+            }
+            if payload.extra_options
+            else {}
+        ),
     }
     if payload.execution_type == "multi-agent":
         initial_state = {
             "messages": [{"role": "user", "content": payload.query}],
             "user_id": payload.thread_id,
             "cart_id": payload.thread_id,
+            # Add top_k and enable_reranking at the top level of StateAdvanced
+            **(
+                {
+                    "top_k": payload.extra_options.top_k,
+                    "enable_reranking": payload.extra_options.enable_reranking,
+                }
+                if payload.extra_options
+                else {}
+            ),
             "product_qa_agent": {
                 "iteration": 0,
                 "final_answer": False,
                 "available_tools": get_tool_descriptions(rag_tools),
                 "tool_calls": [],
-                # Add top_k to the initial state only if it's provided in extra_options
-                **(
-                    {"top_k": payload.extra_options.top_k}
-                    if payload.extra_options
-                    else {}
-                ),
             },
             "shopping_cart_agent": {
                 "iteration": 0,
@@ -190,11 +200,7 @@ def __stream_agent(
 #### Agent Execution Function
 
 
-@traceable(
-    process_inputs=hide_sensitive_inputs,
-    name="run_agent",
-)
-def run_agent(
+def __run_agent(
     payload: Union[RAGRequest, HitlRequest],
     mode: Literal["initial", "hitl"] = "initial",
 ) -> dict | Generator[str, None, dict]:
@@ -233,7 +239,7 @@ def rag_agent(
     payload: Union[RAGRequest, HitlRequest],
     mode: Literal["initial", "hitl"] = "initial",
 ):
-    result: dict = run_agent(payload, mode=mode)
+    result: dict = __run_agent(payload, mode=mode)
     return {
         "answer": result.get("answer", ""),
         "used_context": used_context(result),
