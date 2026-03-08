@@ -123,6 +123,10 @@ In the following notebook:
 
 - **[05-prompt-management.ipynb](./notebooks/week2/05-prompt-management.ipynb)** it is shown an example using Langsmith as a Prompt registry for easier cross-team collaboration. Visit the **Prompts** section on your Langsmith dashboard to manage all prompt templates in the registry.
 
+## Cloud deployment
+
+The project uses [Qdrant Cloud](https://qdrant.tech/documentation/cloud-intro/) to host all collections in the cloud.
+
 ---
 
 ## Deep dive documentation
